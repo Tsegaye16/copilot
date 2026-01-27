@@ -3,10 +3,8 @@
  */
 import express, { Request, Response } from 'express';
 import { App } from '@octokit/app';
-import { createNodeMiddleware } from '@octokit/app';
 import dotenv from 'dotenv';
 import { handleWebhook } from './webhooks';
-import { scanPullRequest, scanCommit } from './scanner';
 
 dotenv.config();
 
@@ -32,8 +30,8 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'healthy' });
 });
 
-// GitHub App middleware
-app.use(createNodeMiddleware(githubApp));
+// Note: We don't use createNodeMiddleware because we handle webhooks directly
+// and use installation-based authentication, not OAuth
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

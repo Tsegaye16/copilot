@@ -3,6 +3,7 @@
  */
 import { Request, Response } from 'express';
 import { App } from '@octokit/app';
+import { createHmac } from 'crypto';
 import { scanPullRequest, scanCommit } from './scanner';
 import { postPRComments } from './github-client';
 
@@ -11,10 +12,25 @@ export async function handleWebhook(
   res: Response,
   app: App
 ): Promise<void> {
-  const event = req.headers['x-github-event'];
+  const event = req.headers['x-github-event'] as string;
   const deliveryId = req.headers['x-github-delivery'] as string;
+  const signature = req.headers['x-hub-signature-256'] as string;
 
   console.log(`Received webhook: ${event} (${deliveryId})`);
+
+  // Verify webhook signature if secret is set
+  const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  if (webhookSecret && signature) {
+    const expectedSignature = 'sha256=' + createHmac('sha256', webhookSecret)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+    
+    if (signature !== expectedSignature) {
+      console.error('Webhook signature verification failed');
+      res.status(401).send('Unauthorized');
+      return;
+    }
+  }
 
   try {
     switch (event) {
