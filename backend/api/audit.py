@@ -6,8 +6,12 @@ from typing import List, Optional
 from datetime import datetime
 import logging
 
-from ..models.schemas import AuditLog
-from ..core.audit import AuditLogger
+try:
+    from models.schemas import AuditLog
+    from core.audit import AuditLogger
+except ImportError:
+    from ..models.schemas import AuditLog
+    from ..core.audit import AuditLogger
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

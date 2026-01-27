@@ -4,7 +4,10 @@ Dashboard and reporting service
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from ..core.audit import AuditLogger
+try:
+    from core.audit import AuditLogger
+except ImportError:
+    from ..core.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 

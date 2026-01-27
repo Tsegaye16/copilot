@@ -6,7 +6,10 @@ from typing import Optional
 from datetime import datetime
 import logging
 
-from ..core.dashboard import DashboardService
+try:
+    from core.dashboard import DashboardService
+except ImportError:
+    from ..core.dashboard import DashboardService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

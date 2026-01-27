@@ -6,7 +6,10 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from ..models.schemas import PolicyConfig, EnforcementMode, Violation, Severity
+try:
+    from models.schemas import PolicyConfig, EnforcementMode, Violation, Severity
+except ImportError:
+    from ..models.schemas import PolicyConfig, EnforcementMode, Violation, Severity
 
 logger = logging.getLogger(__name__)
 

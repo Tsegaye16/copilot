@@ -7,34 +7,10 @@ from fastapi.responses import JSONResponse
 import logging
 from contextlib import asynccontextmanager
 
-# Import based on how the module is being run
-import sys
-import os
-
-# Add the backend directory to Python path if running from parent directory
-if __name__ == "__main__" or "backend" not in sys.path:
-    backend_path = os.path.dirname(os.path.abspath(__file__))
-    if backend_path not in sys.path:
-        sys.path.insert(0, backend_path)
-
-try:
-    from api import scan, policies, audit, dashboard
-    from core.config import settings
-    from core.logging_config import setup_logging
-except ImportError:
-    # Try absolute imports if relative fails
-    try:
-        from backend.api import scan, policies, audit, dashboard
-        from backend.core.config import settings
-        from backend.core.logging_config import setup_logging
-    except ImportError:
-        # Last resort - direct imports
-        import importlib.util
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        sys.path.insert(0, backend_dir)
-        from api import scan, policies, audit, dashboard
-        from core.config import settings
-        from core.logging_config import setup_logging
+# Import modules - use absolute imports when running from backend directory
+from api import scan, policies, audit, dashboard
+from core.config import settings
+from core.logging_config import setup_logging
 
 # Setup logging
 setup_logging()

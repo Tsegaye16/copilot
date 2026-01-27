@@ -5,9 +5,14 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import List
 import logging
 
-from ..models.schemas import ScanRequest, ScanResult
-from ..core.scanner import CodeScanner
-from ..core.audit import AuditLogger
+try:
+    from models.schemas import ScanRequest, ScanResult
+    from core.scanner import CodeScanner
+    from core.audit import AuditLogger
+except ImportError:
+    from ..models.schemas import ScanRequest, ScanResult
+    from ..core.scanner import CodeScanner
+    from ..core.audit import AuditLogger
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

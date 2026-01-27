@@ -5,14 +5,24 @@ import time
 import logging
 import uuid
 from typing import List, Dict, Any, Optional
-from ..models.schemas import (
-    ScanRequest, ScanResult, Violation, EnforcementMode, PolicyConfig
-)
-from ..engines.static_analyzer import StaticAnalyzer
-from ..engines.ai_analyzer import AIAnalyzer
-from ..engines.copilot_detector import CopilotDetector
-from ..engines.license_checker import LicenseChecker
-from ..engines.policy_engine import PolicyEngine
+try:
+    from models.schemas import (
+        ScanRequest, ScanResult, Violation, EnforcementMode, PolicyConfig
+    )
+    from engines.static_analyzer import StaticAnalyzer
+    from engines.ai_analyzer import AIAnalyzer
+    from engines.copilot_detector import CopilotDetector
+    from engines.license_checker import LicenseChecker
+    from engines.policy_engine import PolicyEngine
+except ImportError:
+    from ..models.schemas import (
+        ScanRequest, ScanResult, Violation, EnforcementMode, PolicyConfig
+    )
+    from ..engines.static_analyzer import StaticAnalyzer
+    from ..engines.ai_analyzer import AIAnalyzer
+    from ..engines.copilot_detector import CopilotDetector
+    from ..engines.license_checker import LicenseChecker
+    from ..engines.policy_engine import PolicyEngine
 
 logger = logging.getLogger(__name__)
 

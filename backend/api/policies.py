@@ -5,8 +5,12 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 import logging
 
-from ..models.schemas import PolicyConfig
-from ..engines.policy_engine import PolicyEngine
+try:
+    from models.schemas import PolicyConfig
+    from engines.policy_engine import PolicyEngine
+except ImportError:
+    from ..models.schemas import PolicyConfig
+    from ..engines.policy_engine import PolicyEngine
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

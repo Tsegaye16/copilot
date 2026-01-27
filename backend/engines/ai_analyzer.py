@@ -4,8 +4,12 @@ AI-powered code analysis using Google Gemini API
 import logging
 import google.generativeai as genai
 from typing import List, Dict, Any, Optional
-from ..models.schemas import Violation, ViolationCategory, Severity
-from ..core.config import settings
+try:
+    from models.schemas import Violation, ViolationCategory, Severity
+    from core.config import settings
+except ImportError:
+    from ..models.schemas import Violation, ViolationCategory, Severity
+    from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 

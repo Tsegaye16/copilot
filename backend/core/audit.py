@@ -5,8 +5,12 @@ import uuid
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from ..models.schemas import AuditLog, ScanResult, ScanRequest, EnforcementMode
-from ..core.config import settings
+try:
+    from models.schemas import AuditLog, ScanResult, ScanRequest, EnforcementMode
+    from core.config import settings
+except ImportError:
+    from ..models.schemas import AuditLog, ScanResult, ScanRequest, EnforcementMode
+    from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 

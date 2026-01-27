@@ -4,7 +4,10 @@ License and IP compliance checker
 import re
 import logging
 from typing import List, Dict, Any, Optional
-from ..models.schemas import Violation, ViolationCategory, Severity
+try:
+    from models.schemas import Violation, ViolationCategory, Severity
+except ImportError:
+    from ..models.schemas import Violation, ViolationCategory, Severity
 
 logger = logging.getLogger(__name__)
 
