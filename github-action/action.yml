@@ -1,0 +1,35 @@
+name: 'Enterprise Guardrails Scan'
+description: 'Scan code for security, compliance, and quality issues'
+author: 'Enterprise Guardrails Team'
+
+inputs:
+  backend_url:
+    description: 'Backend API URL'
+    required: false
+    default: 'http://localhost:8000'
+  api_key:
+    description: 'API key for backend authentication'
+    required: false
+  policy_config:
+    description: 'Policy configuration (JSON string)'
+    required: false
+  detect_copilot:
+    description: 'Enable Copilot detection'
+    required: false
+    default: 'true'
+
+outputs:
+  scan_id:
+    description: 'Scan ID'
+  violations_count:
+    description: 'Number of violations found'
+  can_merge:
+    description: 'Whether PR can be merged'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'shield'
+  color: 'blue'

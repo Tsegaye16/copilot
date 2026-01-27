@@ -1,0 +1,32 @@
+name: Telecom Compliance
+description: Rule pack for telecommunications industry compliance
+version: 1.0.0
+
+rules:
+  - id: TEL001
+    name: CPNI Protection Required
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(cpni|customer[_-]?proprietary[_-]?network[_-]?information|call[_-]?detail[_-]?record)
+    explanation: "CPNI must be protected according to FCC regulations"
+    standard_mappings:
+      - FCC-47-CFR-64
+
+  - id: TEL002
+    name: Location Data Protection
+    category: compliance
+    severity: high
+    pattern: |
+      (?i)(location|gps|coordinates|cell[_-]?tower)
+    explanation: "Customer location data requires special protection"
+    standard_mappings:
+      - FCC-47-CFR-64
+
+  - id: TEL003
+    name: CALEA Compliance - No Backdoors
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(backdoor|master[_-]?key|bypass[_-]?auth)
+    explanation: "CALEA compliance requires proper lawful intercept mechanisms, not backdoors"

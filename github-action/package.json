@@ -1,0 +1,20 @@
+{
+  "name": "github-copilot-guardrails-action",
+  "version": "1.0.0",
+  "description": "GitHub Action for Enterprise Copilot Guardrails",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "ncc build src/index.ts -o dist"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "@vercel/ncc": "^0.38.1"
+  }
+}

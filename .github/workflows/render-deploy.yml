@@ -1,0 +1,36 @@
+name: Render Deployment Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Validate Backend
+        run: |
+          cd backend
+          python -m py_compile main.py
+          echo "✅ Backend syntax valid"
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Validate GitHub App
+        run: |
+          cd github-app
+          npm ci
+          npm run build
+          echo "✅ GitHub App build successful"

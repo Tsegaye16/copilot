@@ -1,0 +1,12 @@
+# Default policy configuration
+enforcement_mode: warning
+severity_threshold: medium
+allow_blocking_override: true
+
+enabled_rules: []
+disabled_rules: []
+
+rule_packs:
+  - default
+
+custom_rules: []

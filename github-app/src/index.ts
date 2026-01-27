@@ -1,0 +1,43 @@
+/**
+ * GitHub App for Enterprise Copilot Guardrails
+ */
+import express from 'express';
+import { App } from '@octokit/app';
+import { createNodeMiddleware } from '@octokit/app';
+import dotenv from 'dotenv';
+import { handleWebhook } from './webhooks';
+import { scanPullRequest, scanCommit } from './scanner';
+
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+// Initialize GitHub App
+const githubApp = new App({
+  appId: process.env.GITHUB_APP_ID!,
+  privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
+  webhooks: {
+    secret: process.env.GITHUB_WEBHOOK_SECRET!
+  }
+});
+
+// Webhook endpoint
+app.post('/webhook', async (req, res) => {
+  await handleWebhook(req, res, githubApp);
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
+// GitHub App middleware
+app.use(createNodeMiddleware(githubApp));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`GitHub App server running on port ${PORT}`);
+});
+
+export { app, githubApp };

@@ -1,0 +1,43 @@
+name: Healthcare Compliance
+description: Rule pack for healthcare and HIPAA compliance
+version: 1.0.0
+
+rules:
+  - id: HIPAA001
+    name: PHI Data Protection Required
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(patient[_-]?name|medical[_-]?record|diagnosis|treatment|phi|protected[_-]?health[_-]?information)
+    explanation: "PHI must be protected according to HIPAA regulations"
+    standard_mappings:
+      - HIPAA-164.308
+      - HIPAA-164.312
+
+  - id: HIPAA002
+    name: Encryption Required for PHI
+    category: security
+    severity: critical
+    pattern: |
+      (?i)(patient|medical|health|phi)
+    explanation: "PHI must be encrypted both at rest and in transit"
+    standard_mappings:
+      - HIPAA-164.312
+
+  - id: HIPAA003
+    name: Audit Logging for PHI Access
+    category: compliance
+    severity: high
+    pattern: |
+      (?i)(access[_-]?log|audit[_-]?trail|phi[_-]?access)
+    explanation: "All access to PHI must be logged for audit purposes"
+    standard_mappings:
+      - HIPAA-164.308
+
+  - id: HIPAA004
+    name: No PHI in Logs
+    category: compliance
+    severity: high
+    pattern: |
+      (logger|log|print|console\.log).*patient
+    explanation: "PHI should never be logged in plain text"

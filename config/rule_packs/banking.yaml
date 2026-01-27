@@ -1,0 +1,44 @@
+name: Banking Compliance
+description: Rule pack for banking and financial services compliance
+version: 1.0.0
+
+rules:
+  - id: BANK001
+    name: PCI DSS Compliance - No Card Data Storage
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(card[_-]?number|credit[_-]?card|pan|primary[_-]?account[_-]?number)
+    explanation: "PCI DSS requires that cardholder data must not be stored unless necessary"
+    standard_mappings:
+      - PCI-DSS-3.4
+      - PCI-DSS-3.5
+
+  - id: BANK002
+    name: SOX Compliance - Audit Logging Required
+    category: compliance
+    severity: high
+    pattern: |
+      (?i)(transaction|payment|transfer|withdrawal|deposit)
+    explanation: "Financial transactions must be logged for SOX compliance"
+    standard_mappings:
+      - SOX-404
+
+  - id: BANK003
+    name: Encryption Required for Sensitive Data
+    category: security
+    severity: high
+    pattern: |
+      (?i)(ssn|social[_-]?security|tax[_-]?id|account[_-]?number)
+    explanation: "Sensitive financial data must be encrypted at rest and in transit"
+    standard_mappings:
+      - GLBA
+      - FFIEC
+
+  - id: BANK004
+    name: No Hardcoded Interest Rates
+    category: compliance
+    severity: medium
+    pattern: |
+      (interest[_-]?rate|apr|apy)\s*=\s*[\d.]+
+    explanation: "Interest rates should be configurable, not hardcoded"

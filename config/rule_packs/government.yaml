@@ -1,0 +1,44 @@
+name: Government Compliance
+description: Rule pack for government and public sector compliance
+version: 1.0.0
+
+rules:
+  - id: GOV001
+    name: FISMA Compliance - Security Controls
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(fisma|security[_-]?control|nist)
+    explanation: "FISMA requires implementation of NIST security controls"
+    standard_mappings:
+      - FISMA
+      - NIST-800-53
+
+  - id: GOV002
+    name: PII Protection Required
+    category: compliance
+    severity: critical
+    pattern: |
+      (?i)(pii|personally[_-]?identifiable[_-]?information|ssn|passport)
+    explanation: "PII must be protected according to federal regulations"
+    standard_mappings:
+      - Privacy-Act-1974
+      - OMB-M-17-12
+
+  - id: GOV003
+    name: FedRAMP Compliance
+    category: compliance
+    severity: high
+    pattern: |
+      (?i)(fedramp|cloud[_-]?security|saas)
+    explanation: "Cloud services must comply with FedRAMP requirements"
+    standard_mappings:
+      - FedRAMP
+
+  - id: GOV004
+    name: Section 508 Accessibility
+    category: compliance
+    severity: medium
+    pattern: |
+      (?i)(accessibility|a11y|wcag|section[_-]?508)
+    explanation: "Government software must comply with Section 508 accessibility requirements"
