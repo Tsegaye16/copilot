@@ -2,7 +2,8 @@
 Configuration management using Pydantic Settings
 """
 from pydantic_settings import BaseSettings
-from typing import List
+from pydantic import field_validator
+from typing import List, Union
 import os
 
 
@@ -13,7 +14,6 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DEBUG: bool = False
-    
     
     # Gemini API
     GEMINI_API_KEY: str = ""
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = "change-me-in-production"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
     
     # Data Residency
     DATA_RESIDENCY_REGION: str = "us-east-1"
@@ -40,6 +40,23 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "./logs/guardrails.log"
+    
+    @field_validator('ALLOWED_ORIGINS', mode='before')
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        """Parse ALLOWED_ORIGINS from string or list"""
+        if isinstance(v, list):
+            return ",".join(v)
+        if isinstance(v, str):
+            return v
+        return ""
+    
+    @property
+    def allowed_origins_list(self) -> List[str]:
+        """Get ALLOWED_ORIGINS as a list"""
+        if not self.ALLOWED_ORIGINS or self.ALLOWED_ORIGINS.strip() == "":
+            return []
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
     
     class Config:
         env_file = ".env"

@@ -77,6 +77,7 @@ GITHUB_WEBHOOK_SECRET=your_webhook_secret
 # Security
 SECRET_KEY=generate-a-random-secret-key-here
 ALLOWED_ORIGINS=https://your-github-app-url.onrender.com
+# Note: ALLOWED_ORIGINS can be comma-separated: https://app1.com,https://app2.com
 
 # Data Residency
 DATA_RESIDENCY_REGION=us-east-1
