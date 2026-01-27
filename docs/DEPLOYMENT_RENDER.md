@@ -45,7 +45,7 @@ git push origin main
 - **Root Directory**: `backend`
 - **Runtime**: `Python 3`
 - **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+- **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 **Advanced Settings:**
 - **Auto-Deploy**: `Yes` (deploys on git push)
