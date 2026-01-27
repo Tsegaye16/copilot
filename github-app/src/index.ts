@@ -1,7 +1,7 @@
 /**
  * GitHub App for Enterprise Copilot Guardrails
  */
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { App } from '@octokit/app';
 import { createNodeMiddleware } from '@octokit/app';
 import dotenv from 'dotenv';
@@ -23,12 +23,12 @@ const githubApp = new App({
 });
 
 // Webhook endpoint
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', async (req: Request, res: Response) => {
   await handleWebhook(req, res, githubApp);
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'healthy' });
 });
 

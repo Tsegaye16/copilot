@@ -99,9 +99,14 @@ async function postCommitStatus(
   result: any,
   app: App
 ): Promise<void> {
-  const octokit = await app.getInstallationOctokit(
-    (await app.getInstallation({ owner, repo })).id
-  );
+  // Get installation ID for the repository using the app's octokit
+  const { data: installation } = await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
+    owner,
+    repo
+  });
+  
+  // Get authenticated octokit for this installation
+  const octokit: any = await app.getInstallationOctokit(installation.id);
 
   const state = result.can_merge ? 'success' : 'failure';
   const description = result.can_merge
