@@ -21,12 +21,16 @@ export async function handleWebhook(
   // Verify webhook signature if secret is set
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
   if (webhookSecret && signature) {
+    // Get raw body for signature verification
+    const rawBody = JSON.stringify(req.body);
     const expectedSignature = 'sha256=' + createHmac('sha256', webhookSecret)
-      .update(JSON.stringify(req.body))
+      .update(rawBody)
       .digest('hex');
     
     if (signature !== expectedSignature) {
       console.error('Webhook signature verification failed');
+      console.error(`Expected: ${expectedSignature.substring(0, 20)}...`);
+      console.error(`Received: ${signature.substring(0, 20)}...`);
       res.status(401).send('Unauthorized');
       return;
     }
@@ -48,9 +52,12 @@ export async function handleWebhook(
     }
 
     res.status(200).send('OK');
-  } catch (error) {
+  } catch (error: any) {
     console.error('Webhook handling error:', error);
-    res.status(500).send('Internal Server Error');
+    console.error('Error stack:', error?.stack);
+    console.error('Error message:', error?.message);
+    // Still return 200 to GitHub so it doesn't retry
+    res.status(200).send('OK');
   }
 }
 
@@ -83,23 +90,36 @@ async function handlePush(payload: any, app: App): Promise<void> {
   const commits = payload.commits || [];
   const repo = payload.repository;
 
-  for (const commit of commits) {
-    console.log(`Scanning commit ${commit.id} in ${repo.full_name}`);
-    
-    const result = await scanCommit(
-      repo.full_name,
-      commit.id,
-      app
-    );
+  console.log(`[Push] Processing ${commits.length} commits in ${repo.full_name}`);
 
-    // Post commit status check
-    await postCommitStatus(
-      repo.owner.login,
-      repo.name,
-      commit.id,
-      result,
-      app
-    );
+  // Only scan if there are commits and they're not empty
+  if (commits.length === 0) {
+    console.log('[Push] No commits to scan');
+    return;
+  }
+
+  for (const commit of commits) {
+    try {
+      console.log(`[Push] Scanning commit ${commit.id} in ${repo.full_name}`);
+      
+      const result = await scanCommit(
+        repo.full_name,
+        commit.id,
+        app
+      );
+
+      // Post commit status check
+      await postCommitStatus(
+        repo.owner.login,
+        repo.name,
+        commit.id,
+        result,
+        app
+      );
+    } catch (error: any) {
+      console.error(`[Push] Error scanning commit ${commit.id}:`, error);
+      // Continue with next commit
+    }
   }
 }
 

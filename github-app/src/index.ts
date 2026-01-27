@@ -9,9 +9,8 @@ import { handleWebhook } from './webhooks';
 dotenv.config();
 
 const app = express();
-app.use(express.json());
 
-// Initialize GitHub App
+// Initialize GitHub App first (before body parsing for webhook signature verification)
 const githubApp = new App({
   appId: process.env.GITHUB_APP_ID!,
   privateKey: process.env.GITHUB_APP_PRIVATE_KEY!,
@@ -20,8 +19,21 @@ const githubApp = new App({
   }
 });
 
+// Parse JSON body (after app initialization)
+app.use(express.json());
+
+// Root endpoint for testing
+app.get('/', (req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'github-app',
+    endpoints: ['/health', '/webhook']
+  });
+});
+
 // Webhook endpoint
 app.post('/webhook', async (req: Request, res: Response) => {
+  console.log('Webhook received at /webhook');
   await handleWebhook(req, res, githubApp);
 });
 

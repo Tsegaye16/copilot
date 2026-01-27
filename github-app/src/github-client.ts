@@ -69,16 +69,24 @@ export async function getCommitFiles(
   commitSha: string,
   app: App
 ): Promise<any[]> {
-  const [owner, repo] = repository.split('/');
-  const octokit = await getInstallationOctokit(owner, repo, app);
+  try {
+    const [owner, repo] = repository.split('/');
+    console.log(`[GitHub] Fetching commit ${commitSha} from ${owner}/${repo}`);
+    
+    const octokit = await getInstallationOctokit(owner, repo, app);
 
-  const { data: commit } = await octokit.rest.repos.getCommit({
-    owner,
-    repo,
-    ref: commitSha
-  });
+    const { data: commit } = await octokit.rest.repos.getCommit({
+      owner,
+      repo,
+      ref: commitSha
+    });
 
-  return commit.files || [];
+    console.log(`[GitHub] Commit has ${commit.files?.length || 0} files`);
+    return commit.files || [];
+  } catch (error: any) {
+    console.error(`[GitHub] Error fetching commit files:`, error?.message || error);
+    throw error;
+  }
 }
 
 export async function postPRComments(
