@@ -1,5 +1,6 @@
 """
 AI-powered code analysis using Google Gemini API
+Enhanced for security, performance, and maintainability analysis
 """
 import logging
 import google.generativeai as genai
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class AIAnalyzer:
-    """AI-powered code analysis engine using Gemini"""
+    """AI-powered code analysis engine using Gemini for comprehensive code review"""
     
     def __init__(self):
         if not settings.GEMINI_API_KEY:
@@ -25,7 +26,13 @@ class AIAnalyzer:
         
         try:
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel('gemini-pro')
+            # Use gemini-1.5-pro if available, fallback to gemini-pro
+            try:
+                self.model = genai.GenerativeModel('gemini-1.5-pro')
+                logger.info("Using Gemini 1.5 Pro")
+            except:
+                self.model = genai.GenerativeModel('gemini-pro')
+                logger.info("Using Gemini Pro")
             self.enabled = True
             logger.info("Gemini AI analyzer initialized successfully")
         except Exception as e:
@@ -62,36 +69,64 @@ class AIAnalyzer:
         """Build the prompt for AI analysis"""
         copilot_note = "NOTE: This code is suspected to be AI-generated (GitHub Copilot). Apply stricter security standards." if is_copilot else ""
         
-        prompt = f"""You are an expert security code reviewer analyzing code for enterprise production systems.
+        prompt = f"""You are an expert enterprise code reviewer analyzing code for production systems. Your analysis must be thorough, covering security, performance, maintainability, and compliance.
 
 {copilot_note}
 
 File: {file_path}
+Context: {context or "No additional context"}
 
 Code to analyze:
 ```python
-{content}
+{content[:8000]}  # Limit to 8000 chars for API limits
 ```
 
-Analyze this code for:
-1. Security vulnerabilities (OWASP Top 10, CWE)
-2. Performance issues
-3. Maintainability concerns
-4. Best practice violations
-5. Potential bugs or logic errors
+**COMPREHENSIVE ANALYSIS REQUIRED:**
 
-For each issue found, provide:
-- rule_id: A unique identifier (e.g., "AI001")
-- rule_name: Short descriptive name
-- category: security, compliance, code_quality, or standard
-- severity: low, medium, high, or critical
-- line_number: Line number (1-indexed)
-- message: Brief issue description
-- explanation: Detailed explanation of why this is a problem
-- fix_suggestion: Specific code fix or improvement suggestion
-- standard_mappings: OWASP/CWE mappings if applicable (comma-separated)
+1. **SECURITY VULNERABILITIES** (OWASP Top 10, CWE):
+   - Hardcoded secrets, credentials, API keys
+   - SQL/NoSQL injection risks
+   - XSS, CSRF vulnerabilities
+   - Insecure deserialization
+   - Unsafe file/command execution
+   - Authentication/authorization flaws
+   - Cryptographic weaknesses
+   - Insecure dependencies
 
-Format your response as JSON array of violations:
+2. **PERFORMANCE ISSUES**:
+   - Inefficient algorithms (O(n²) when O(n) possible)
+   - Memory leaks or excessive memory usage
+   - Blocking I/O operations
+   - N+1 query problems
+   - Unnecessary database calls
+   - Missing caching opportunities
+   - Inefficient data structures
+
+3. **MAINTAINABILITY CONCERNS**:
+   - Code duplication
+   - Complex functions (high cyclomatic complexity)
+   - Poor error handling
+   - Missing logging
+   - Inconsistent naming conventions
+   - Magic numbers/strings
+   - Tight coupling
+   - Missing documentation
+
+4. **BEST PRACTICES & STANDARDS**:
+   - PEP 8 compliance (Python)
+   - SOLID principles violations
+   - Design pattern misuse
+   - Resource management (file handles, connections)
+   - Exception handling patterns
+   - Type safety issues
+
+5. **COMPLIANCE & IP RISKS**:
+   - License compatibility issues
+   - Potential IP violations
+   - Data privacy concerns (GDPR, etc.)
+   - Regulatory compliance gaps
+
+**OUTPUT FORMAT (JSON array):**
 [
   {{
     "rule_id": "AI001",
@@ -99,21 +134,34 @@ Format your response as JSON array of violations:
     "category": "security",
     "severity": "high",
     "line_number": 15,
-    "message": "User input not validated",
-    "explanation": "The function accepts user input without validation...",
-    "fix_suggestion": "Add input validation: if not isinstance(value, str): raise ValueError(...)",
+    "message": "User input not validated before processing",
+    "explanation": "The function accepts user input without validation, which can lead to injection attacks, data corruption, or system compromise. Input validation is a critical security control.",
+    "fix_suggestion": "Add input validation: if not isinstance(value, str) or len(value) > MAX_LENGTH: raise ValueError('Invalid input')",
     "standard_mappings": ["CWE-20", "OWASP-A03:2021"]
   }}
 ]
 
-If no issues found, return empty array [].
+**SEVERITY GUIDELINES:**
+- critical: Immediate security risk, data breach potential, system compromise
+- high: Significant security issue, performance bottleneck, major maintainability problem
+- medium: Security concern, performance issue, maintainability problem
+- low: Code quality issue, minor optimization opportunity
+
+**CATEGORIES:**
+- security: Security vulnerabilities
+- compliance: Compliance/regulatory issues
+- code_quality: Code quality and maintainability
+- license: License/IP issues
+- ip_risk: Intellectual property risks
+- standard: Coding standards violations
+
+Return ONLY valid JSON array. If no issues found, return [].
 """
         return prompt
     
     async def _call_gemini(self, prompt: str) -> str:
         """Call Gemini API"""
         try:
-            # Note: Gemini SDK may not be fully async, but we wrap it for consistency
             import asyncio
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(

@@ -1,11 +1,12 @@
 """
 Policy engine for rule management and enforcement
+Supports override capability for blocking mode
 """
 import yaml
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 try:
     from models.schemas import PolicyConfig, EnforcementMode, Violation, Severity
 except ImportError:
@@ -93,9 +94,19 @@ class PolicyEngine:
     def determine_enforcement(
         self,
         violations: List[Violation],
-        policy: PolicyConfig
-    ) -> tuple:
-        """Determine enforcement action and merge eligibility"""
+        policy: PolicyConfig,
+        override_requested: bool = False
+    ) -> Tuple[EnforcementMode, bool]:
+        """Determine enforcement action and merge eligibility
+        
+        Args:
+            violations: List of detected violations
+            policy: Policy configuration
+            override_requested: Whether user requested to override blocking
+            
+        Returns:
+            Tuple of (enforcement_mode, can_merge)
+        """
         if not violations:
             return EnforcementMode.ADVISORY, True
         
@@ -103,7 +114,24 @@ class PolicyEngine:
         critical_violations = [v for v in violations if v.severity == Severity.CRITICAL]
         high_violations = [v for v in violations if v.severity == Severity.HIGH]
         
+        # Apply stricter rules for Copilot-generated code
+        copilot_violations = [v for v in violations if v.is_copilot_generated]
+        copilot_critical = [v for v in copilot_violations if v.severity == Severity.CRITICAL]
+        
         if policy.enforcement_mode == EnforcementMode.BLOCKING:
+            # Check if override is allowed and requested
+            if override_requested and policy.allow_blocking_override:
+                # Allow override but still show warnings
+                if critical_violations or copilot_critical:
+                    return EnforcementMode.WARNING, True
+                else:
+                    return EnforcementMode.ADVISORY, True
+            
+            # Stricter blocking for Copilot-generated critical violations
+            if copilot_critical:
+                return EnforcementMode.BLOCKING, False
+            
+            # Block on critical violations or multiple high violations
             if critical_violations or (high_violations and len(high_violations) > 3):
                 return EnforcementMode.BLOCKING, False
             elif high_violations:
@@ -111,7 +139,7 @@ class PolicyEngine:
             else:
                 return EnforcementMode.ADVISORY, True
         elif policy.enforcement_mode == EnforcementMode.WARNING:
-            if critical_violations:
+            if critical_violations or copilot_critical:
                 return EnforcementMode.WARNING, True
             else:
                 return EnforcementMode.ADVISORY, True

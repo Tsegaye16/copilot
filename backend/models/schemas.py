@@ -48,6 +48,7 @@ class ScanRequest(BaseModel):
     base_sha: Optional[str] = Field(None, description="Base commit SHA for diff")
     policy_config: Optional[Dict[str, Any]] = Field(None, description="Policy configuration override")
     detect_copilot: bool = Field(True, description="Whether to detect Copilot-generated code")
+    override_blocking: bool = Field(False, description="Request to override blocking enforcement")
 
 
 class Violation(BaseModel):

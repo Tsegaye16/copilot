@@ -67,22 +67,33 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
   const repo = payload.repository;
 
   if (action === 'opened' || action === 'synchronize' || action === 'reopened') {
-    console.log(`Scanning PR #${pr.number} in ${repo.full_name}`);
+    console.log(`[PR] Scanning PR #${pr.number} in ${repo.full_name}`);
     
-    const result = await scanPullRequest(
-      repo.full_name,
-      pr.number,
-      app
-    );
+    try {
+      const result = await scanPullRequest(
+        repo.full_name,
+        pr.number,
+        app
+      );
 
-    // Post results as PR comments
-    await postPRComments(
-      repo.owner.login,
-      repo.name,
-      pr.number,
-      result,
-      app
-    );
+      console.log(`[PR] Scan completed: ${result.violations?.length || 0} violations`);
+      console.log(`[PR] Can merge: ${result.can_merge}`);
+
+      // Post results as PR comments
+      console.log(`[PR] Posting comments to PR #${pr.number}`);
+      await postPRComments(
+        repo.owner.login,
+        repo.name,
+        pr.number,
+        result,
+        app
+      );
+      console.log(`[PR] Successfully posted comments to PR #${pr.number}`);
+    } catch (error: any) {
+      console.error(`[PR] Error processing PR #${pr.number}:`, error?.message || error);
+      console.error(`[PR] Error stack:`, error?.stack);
+      // Don't throw - log and continue
+    }
   }
 }
 

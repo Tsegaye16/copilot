@@ -94,9 +94,10 @@ class CodeScanner:
                 filtered_violations, pack_name
             )
         
-        # Determine enforcement action
+        # Determine enforcement action (with override support)
+        override_requested = getattr(request, 'override_blocking', False)
         enforcement_action, can_merge = self.policy_engine.determine_enforcement(
-            filtered_violations, policy
+            filtered_violations, policy, override_requested=override_requested
         )
         
         # Build summary

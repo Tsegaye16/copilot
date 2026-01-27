@@ -96,55 +96,105 @@ export async function postPRComments(
   scanResult: any,
   app: App
 ): Promise<void> {
-  const octokit = await getInstallationOctokit(owner, repo, app);
+  try {
+    console.log(`[GitHub] Getting installation octokit for ${owner}/${repo}`);
+    const octokit = await getInstallationOctokit(owner, repo, app);
+    console.log(`[GitHub] Successfully authenticated`);
 
-  // Group violations by file
-  const violationsByFile: { [key: string]: any[] } = {};
-  for (const violation of scanResult.violations) {
-    if (!violationsByFile[violation.file_path]) {
-      violationsByFile[violation.file_path] = [];
+    // Get the PR head SHA for comments
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber
+    });
+    const headSha = pr.head.sha;
+    console.log(`[GitHub] PR head SHA: ${headSha}`);
+
+    // Group violations by file
+    const violationsByFile: { [key: string]: any[] } = {};
+    for (const violation of scanResult.violations || []) {
+      if (!violationsByFile[violation.file_path]) {
+        violationsByFile[violation.file_path] = [];
+      }
+      violationsByFile[violation.file_path].push(violation);
     }
-    violationsByFile[violation.file_path].push(violation);
-  }
 
-  // Post summary comment
-  const summaryComment = buildSummaryComment(scanResult);
-  await octokit.rest.issues.createComment({
-    owner,
-    repo,
-    issue_number: prNumber,
-    body: summaryComment
-  });
+    console.log(`[GitHub] Posting summary comment`);
+    // Post summary comment
+    const summaryComment = buildSummaryComment(scanResult);
+    try {
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: summaryComment
+      });
+      console.log(`[GitHub] Summary comment posted`);
+    } catch (error: any) {
+      console.error(`[GitHub] Failed to post summary comment:`, error?.message || error);
+    }
 
-  // Post inline comments for each violation
-  for (const [filePath, violations] of Object.entries(violationsByFile)) {
-    for (const violation of violations) {
-      try {
-        await octokit.rest.pulls.createReviewComment({
-          owner,
-          repo,
-          pull_number: prNumber,
-          commit_id: scanResult.commit_sha || 'HEAD',
-          path: filePath,
-          line: violation.line_number,
-          body: buildViolationComment(violation)
-        });
-      } catch (error) {
-        console.error(`Failed to post comment for ${filePath}:${violation.line_number}:`, error);
+    // Post inline comments for each violation
+    console.log(`[GitHub] Posting ${scanResult.violations?.length || 0} inline comments`);
+    let inlineCommentsPosted = 0;
+    for (const [filePath, violations] of Object.entries(violationsByFile)) {
+      for (const violation of violations) {
+        try {
+          // Get file content to find the correct line in the diff
+          const { data: fileContent } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: filePath,
+            ref: headSha
+          });
+
+          if ('content' in fileContent) {
+            const lines = Buffer.from(fileContent.content, 'base64').toString('utf-8').split('\n');
+            const lineNumber = Math.min(violation.line_number || 1, lines.length);
+
+            await octokit.rest.pulls.createReviewComment({
+              owner,
+              repo,
+              pull_number: prNumber,
+              commit_id: headSha,
+              path: filePath,
+              line: lineNumber,
+              body: buildViolationComment(violation)
+            });
+            inlineCommentsPosted++;
+          }
+        } catch (error: any) {
+          console.error(`[GitHub] Failed to post comment for ${filePath}:${violation.line_number}:`, error?.message || error);
+        }
       }
     }
-  }
+    console.log(`[GitHub] Posted ${inlineCommentsPosted} inline comments`);
 
-  // Set PR status
-  const state = scanResult.can_merge ? 'success' : 'failure';
-  await octokit.rest.repos.createCommitStatus({
-    owner,
-    repo,
-    sha: scanResult.commit_sha || 'HEAD',
-    state,
-    description: `${scanResult.violations.length} violations found`,
-    context: 'guardrails/security-scan'
-  });
+    // Set PR status
+    console.log(`[GitHub] Setting commit status`);
+    const state = scanResult.can_merge ? 'success' : 'failure';
+    const description = scanResult.violations?.length
+      ? `${scanResult.violations.length} violation(s) found`
+      : 'All checks passed';
+    
+    try {
+      await octokit.rest.repos.createCommitStatus({
+        owner,
+        repo,
+        sha: headSha,
+        state,
+        description,
+        context: 'guardrails/security-scan'
+      });
+      console.log(`[GitHub] Commit status set to ${state}`);
+    } catch (error: any) {
+      console.error(`[GitHub] Failed to set commit status:`, error?.message || error);
+    }
+  } catch (error: any) {
+    console.error(`[GitHub] Error in postPRComments:`, error?.message || error);
+    console.error(`[GitHub] Error stack:`, error?.stack);
+    throw error;
+  }
 }
 
 function buildSummaryComment(result: any): string {
