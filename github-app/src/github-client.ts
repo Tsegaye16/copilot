@@ -296,6 +296,31 @@ export async function postPRComments(
 }
 
 function buildSummaryComment(result: any): string {
+  // Handle error cases
+  if (result.error) {
+    return `## ⚠️ Guardrails Security Scan - Backend Unavailable
+
+**Status:** Backend service temporarily unavailable  
+**Scan ID:** \`${result.scan_id || 'error'}\`  
+**Repository:** ${result.repository || 'unknown'}
+
+### 🔧 Issue
+${result.error_message || 'The guardrails backend service is currently unavailable.'}
+
+### 💡 What to do
+- The backend service may be starting up (this can take 30-60 seconds on Render.com)
+- Please wait a moment and push a new commit or reopen this PR to retry
+- If the issue persists, check the service logs
+
+### ⚙️ Current Status
+**Can Merge:** ✅ Yes (scanning disabled due to backend unavailability)  
+**Mode:** Advisory
+
+---
+*Powered by Enterprise GitHub Copilot Guardrails*
+`;
+  }
+
   const emoji = result.can_merge ? '✅' : '❌';
   const status = result.can_merge ? 'PASSED' : 'FAILED';
   const copilotEmoji = result.copilot_detected ? '🤖' : '';
@@ -320,7 +345,7 @@ function buildSummaryComment(result: any): string {
 
 **Scan ID:** \`${result.scan_id}\`  
 **Repository:** ${result.repository}  
-**Processing Time:** ${result.processing_time_ms.toFixed(2)}ms  
+**Processing Time:** ${(result.processing_time_ms || 0).toFixed(2)}ms  
 **Copilot Detected:** ${result.copilot_detected ? 'Yes 🤖' : 'No'}
 
 ### 📊 Summary
@@ -332,7 +357,7 @@ function buildSummaryComment(result: any): string {
 ${copilotViolations > 0 ? `- **🤖 Copilot Violations:** ${copilotViolations}` : ''}
 
 ### ⚙️ Enforcement Action
-**Mode:** \`${result.enforcement_action.toUpperCase()}\`  
+**Mode:** \`${(result.enforcement_action || 'advisory').toUpperCase()}\`  
 **Can Merge:** ${result.can_merge ? '✅ Yes' : '❌ No'}${enforcementNote}
 
 ${result.violations?.length > 0 
