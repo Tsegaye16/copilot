@@ -121,10 +121,19 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         return;
       }
 
-      console.log(`[PR] Scan completed successfully`);
-      console.log(`[PR] Violations: ${result.violations?.length || 0}`);
-      console.log(`[PR] Can merge: ${result.can_merge}`);
-      console.log(`[PR] Enforcement: ${result.enforcement_action}`);
+      // Check if scan had an error (e.g., backend unavailable)
+      if (result.error) {
+        console.warn(`[PR] Scan completed with error: ${result.error_message || 'Unknown error'}`);
+        console.warn(`[PR] Error details:`, result.error_details);
+        console.log(`[PR] Violations: ${result.violations?.length || 0} (error state - backend unavailable)`);
+        console.log(`[PR] Can merge: ${result.can_merge} (advisory mode due to error)`);
+        console.log(`[PR] Enforcement: ${result.enforcement_action}`);
+      } else {
+        console.log(`[PR] Scan completed successfully`);
+        console.log(`[PR] Violations: ${result.violations?.length || 0}`);
+        console.log(`[PR] Can merge: ${result.can_merge}`);
+        console.log(`[PR] Enforcement: ${result.enforcement_action}`);
+      }
 
       // Always post results, even if no violations
       console.log(`[PR] Posting comments to PR #${pr.number}`);
@@ -150,12 +159,20 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
             repo.name,
             app
           );
+          // Determine status based on result
+          let state: 'success' | 'failure' | 'error' = result.error 
+            ? 'error' 
+            : (result.can_merge ? 'success' : 'failure');
+          const description = result.error 
+            ? (result.error_message || 'Backend unavailable')
+            : `Scan completed: ${result.violations?.length || 0} violations`;
+          
           await octokit.rest.repos.createCommitStatus({
             owner: repo.owner.login,
             repo: repo.name,
             sha: pr.head.sha,
-            state: result.can_merge ? 'success' : 'failure',
-            description: `Scan completed: ${result.violations?.length || 0} violations`,
+            state,
+            description,
             context: 'guardrails/security-scan'
           });
           console.log(`[PR] Set commit status as fallback`);
@@ -242,10 +259,20 @@ async function postCommitStatus(
     // Get authenticated octokit for this installation
     const octokit = await getInstallationOctokit(owner, repo, app);
 
-    const state = result.can_merge ? 'success' : 'failure';
-    const description = result.can_merge
-      ? 'All checks passed'
-      : `${result.violations?.length || 0} violations found`;
+    // Handle error states (e.g., backend unavailable)
+    let state: 'success' | 'failure' | 'error';
+    let description: string;
+    
+    if (result.error) {
+      state = 'error';
+      description = result.error_message || 'Backend unavailable';
+    } else if (result.can_merge) {
+      state = 'success';
+      description = 'All checks passed';
+    } else {
+      state = 'failure';
+      description = `${result.violations?.length || 0} violations found`;
+    }
 
     await octokit.rest.repos.createCommitStatus({
       owner,
@@ -255,6 +282,8 @@ async function postCommitStatus(
       description,
       context: 'guardrails/security-scan'
     });
+    
+    console.log(`[CommitStatus] Set status to ${state}: ${description}`);
   } catch (error: any) {
     console.error(`[CommitStatus] Failed to set status for ${sha}:`, error?.message || error);
     throw error;

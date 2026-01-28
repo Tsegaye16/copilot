@@ -270,10 +270,23 @@ export async function postPRComments(
 
     // Set PR status
     console.log(`[GitHub] Setting commit status`);
-    const state = scanResult.can_merge ? 'success' : 'failure';
-    const description = scanResult.violations?.length
-      ? `${scanResult.violations.length} violation(s) found`
-      : 'All checks passed';
+    
+    // Handle error states (e.g., backend unavailable)
+    let state: 'success' | 'failure' | 'error';
+    let description: string;
+    
+    if (scanResult.error) {
+      state = 'error';
+      description = scanResult.error_message || 'Backend unavailable';
+    } else if (scanResult.can_merge) {
+      state = 'success';
+      description = scanResult.violations?.length
+        ? `${scanResult.violations.length} violation(s) found`
+        : 'All checks passed';
+    } else {
+      state = 'failure';
+      description = `${scanResult.violations?.length || 0} violation(s) found`;
+    }
     
     try {
       await octokit.rest.repos.createCommitStatus({
@@ -284,7 +297,7 @@ export async function postPRComments(
         description,
         context: 'guardrails/security-scan'
       });
-      console.log(`[GitHub] Commit status set to ${state}`);
+      console.log(`[GitHub] Commit status set to ${state}: ${description}`);
     } catch (error: any) {
       console.error(`[GitHub] Failed to set commit status:`, error?.message || error);
     }
