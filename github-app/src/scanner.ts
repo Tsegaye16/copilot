@@ -5,7 +5,20 @@ import axios from 'axios';
 import { App } from '@octokit/app';
 import { getPRFiles, getCommitFiles } from './github-client';
 
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+// Get backend URL and ensure it has protocol
+function getBackendUrl(): string {
+  const url = process.env.BACKEND_API_URL || 'http://localhost:8000';
+  
+  // If URL doesn't start with http:// or https://, add https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    console.warn(`[Scanner] Backend URL missing protocol, adding https://: ${url}`);
+    return `https://${url}`;
+  }
+  
+  return url;
+}
+
+const BACKEND_API_URL = getBackendUrl();
 
 export async function scanPullRequest(
   repository: string,
