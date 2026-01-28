@@ -108,7 +108,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         console.error(`[PR] Scan returned no result for PR #${pr.number}`);
         // Try to post a comment about the failure
         try {
-          const octokit: any = await getInstallationOctokit(repo.owner.login, repo.name, app);
+          const octokit = await getInstallationOctokit(repo.owner.login, repo.name, app);
           await octokit.rest.issues.createComment({
             owner: repo.owner.login,
             repo: repo.name,
@@ -145,7 +145,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         
         // Try to at least set commit status
         try {
-          const octokit: any = await getInstallationOctokit(
+          const octokit = await getInstallationOctokit(
             repo.owner.login,
             repo.name,
             app
@@ -173,7 +173,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
       
       // Try to post error comment
       try {
-        const octokit: any = await getInstallationOctokit(repo.owner.login, repo.name, app);
+        const octokit = await getInstallationOctokit(repo.owner.login, repo.name, app);
         await octokit.rest.issues.createComment({
           owner: repo.owner.login,
           repo: repo.name,
@@ -240,7 +240,7 @@ async function postCommitStatus(
 ): Promise<void> {
   try {
     // Get authenticated octokit for this installation
-    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    const octokit = await getInstallationOctokit(owner, repo, app);
 
     const state = result.can_merge ? 'success' : 'failure';
     const description = result.can_merge
