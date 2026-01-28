@@ -28,8 +28,8 @@ class AIAnalyzer:
             genai.configure(api_key=settings.GEMINI_API_KEY)
             # Use gemini-2.5-pro if available, fallback to gemini-pro
             try:
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
-                logger.info("Using Gemini 2.5 flash")
+                self.model = genai.GenerativeModel('gemini-2.0-flash')
+                logger.info("Using Gemini 2.0 flash")
             except:
                 self.model = genai.GenerativeModel('gemini-flash')
                 logger.info("Using Gemini Pro")
