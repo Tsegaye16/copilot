@@ -12,49 +12,54 @@ export async function getInstallationOctokit(
 ): Promise<Octokit> {
   try {
     console.log(`[GitHub] Getting installation for ${owner}/${repo}`);
-    
+
     // Get installation ID for the repository using the app's octokit
     const { data: installation } = await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
       owner,
       repo
     });
-    
+
     console.log(`[GitHub] Installation ID: ${installation.id}`);
-    
-    // Format private key (handle both \n and actual newlines)
-    let privateKey = process.env.GITHUB_APP_PRIVATE_KEY || '';
-    if (privateKey.includes('\\n')) {
-      privateKey = privateKey.replace(/\\n/g, '\n');
+
+    // Get app ID and private key from environment variables
+    const appId = process.env.GITHUB_APP_ID;
+    const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
+
+    if (!appId || !privateKey) {
+      throw new Error('GITHUB_APP_ID or GITHUB_APP_PRIVATE_KEY environment variables are not set');
     }
-    
-    // Create auth instance using @octokit/auth-app
+
+    // Format private key if needed (handle \n escape sequences)
+    const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+
+    // Use @octokit/auth-app to get the installation access token
     const auth = createAppAuth({
-      appId: process.env.GITHUB_APP_ID!,
-      privateKey: privateKey,
+      appId: parseInt(appId, 10),
+      privateKey: formattedPrivateKey,
     });
-    
-    // Get installation authentication token
+
     const installationAuthentication = await auth({
       type: 'installation',
       installationId: installation.id,
     });
-    
+
     console.log(`[GitHub] Got installation access token`);
-    
-    // Create Octokit instance with the installation token
+
+    // Create a new Octokit instance with the installation token
     const octokit = new Octokit({
-      auth: installationAuthentication.token
+      auth: installationAuthentication.token,
     });
-    
+
     if (!octokit) {
-      throw new Error('Failed to create Octokit instance');
+      throw new Error('Failed to get installation octokit - returned undefined');
     }
-    
+
     if (!octokit.rest) {
       throw new Error('Octokit instance missing rest property');
     }
-    
+
     console.log(`[GitHub] Successfully created Octokit instance with rest API`);
+    console.log(`[GitHub] Octokit has rest: ${!!octokit.rest}`);
     return octokit;
   } catch (error: any) {
     console.error(`[GitHub] Error getting installation octokit:`, error?.message || error);
@@ -72,7 +77,7 @@ export async function getPRFiles(
     const [owner, repo] = repository.split('/');
     console.log(`[GitHub] Fetching PR files for ${owner}/${repo} PR #${prNumber}`);
     
-    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    const octokit = await getInstallationOctokit(owner, repo, app);
     
     if (!octokit) {
       throw new Error('Octokit instance is undefined');
@@ -138,7 +143,7 @@ export async function getPRFiles(
       })
     );
 
-    const filesWithActualContent = filesWithContent.filter(f => f.contents || f.patch);
+    const filesWithActualContent = filesWithContent.filter((f: any) => f.contents || f.patch);
     console.log(`[GitHub] Files with content: ${filesWithActualContent.length}/${files.length}`);
     
     return filesWithActualContent;
@@ -158,7 +163,7 @@ export async function getCommitFiles(
     const [owner, repo] = repository.split('/');
     console.log(`[GitHub] Fetching commit ${commitSha} from ${owner}/${repo}`);
     
-    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    const octokit = await getInstallationOctokit(owner, repo, app);
     
     if (!octokit) {
       throw new Error('Octokit instance is undefined');
@@ -176,6 +181,7 @@ export async function getCommitFiles(
     return commit.files || [];
   } catch (error: any) {
     console.error(`[GitHub] Error fetching commit files:`, error?.message || error);
+    console.error(`[GitHub] Error stack:`, error?.stack);
     throw error;
   }
 }
