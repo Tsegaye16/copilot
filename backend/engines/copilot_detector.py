@@ -41,7 +41,27 @@ class CopilotDetector:
             r'def\s+\w+\(.*\):\s*$',  # Functions with no docstrings
         ]
         
-        # Additional heuristics can be added here
+        # Check for generic patterns
+        for pattern in generic_patterns:
+            if re.search(pattern, content):
+                return True
+        
+        # Additional heuristics:
+        # 1. Very verbose comments that explain obvious things (common in AI code)
+        comment_lines = [line for line in content.split('\n') if line.strip().startswith('#')]
+        if len(comment_lines) > len(content.split('\n')) * 0.3:  # More than 30% comments
+            return True
+        
+        # 2. Generic function names with no context
+        if re.search(r'def\s+(process|handle|execute|run|main)\s*\(', content, re.IGNORECASE):
+            if not re.search(r'""".*"""', content, re.DOTALL):  # No docstring
+                return True
+        
+        # 3. Overly generic error handling
+        if re.search(r'except\s+Exception\s*:', content) and not re.search(r'except\s+\w+Error\s*:', content):
+            # Has generic Exception but no specific error types
+            return True
+        
         return False
     
     def detect_from_metadata(self, metadata: Dict[str, Any]) -> bool:

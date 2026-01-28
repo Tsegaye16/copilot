@@ -62,6 +62,38 @@ class StaticAnalyzer:
                 "category": ViolationCategory.SECURITY,
                 "severity": Severity.CRITICAL,
                 "standard_mappings": ["CWE-798"]
+            },
+            {
+                "pattern": r'(?i)(token|bearer[_-]?token)\s*[=:]\s*["\']([^"\']{20,})["\']',
+                "rule_id": "SEC006",
+                "rule_name": "Hardcoded Token",
+                "category": ViolationCategory.SECURITY,
+                "severity": Severity.CRITICAL,
+                "standard_mappings": ["CWE-798", "OWASP-A07:2021"]
+            },
+            {
+                "pattern": r'(?i)(private[_-]?key|privatekey)\s*[=:]\s*["\']([^"\']{20,})["\']',
+                "rule_id": "SEC007",
+                "rule_name": "Hardcoded Private Key",
+                "category": ViolationCategory.SECURITY,
+                "severity": Severity.CRITICAL,
+                "standard_mappings": ["CWE-798", "OWASP-A07:2021"]
+            },
+            {
+                "pattern": r'-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----',
+                "rule_id": "SEC008",
+                "rule_name": "Hardcoded Private Key (PEM Format)",
+                "category": ViolationCategory.SECURITY,
+                "severity": Severity.CRITICAL,
+                "standard_mappings": ["CWE-798", "OWASP-A07:2021"]
+            },
+            {
+                "pattern": r'(?i)(database[_-]?url|db[_-]?password|connection[_-]?string)\s*[=:]\s*["\']([^"\']*://[^"\']+)["\']',
+                "rule_id": "SEC009",
+                "rule_name": "Hardcoded Database Credentials",
+                "category": ViolationCategory.SECURITY,
+                "severity": Severity.CRITICAL,
+                "standard_mappings": ["CWE-798", "OWASP-A07:2021"]
             }
         ]
     

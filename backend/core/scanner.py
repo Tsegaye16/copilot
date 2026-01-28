@@ -55,33 +55,54 @@ class CodeScanner:
         
         # Process each file
         for file_data in request.files:
-            file_path = file_data.get("path", "")
-            content = file_data.get("content", "")
-            metadata = file_data.get("metadata", {})
-            
-            # Detect Copilot code
-            is_copilot = False
-            if request.detect_copilot:
-                is_copilot = self.copilot_detector.detect(content, metadata)
-                if is_copilot:
-                    copilot_detected = True
-                    logger.info(f"Copilot code detected in {file_path}")
-            
-            # Static analysis
-            static_violations = self.static_analyzer.analyze_file(
-                file_path, content, is_copilot
-            )
-            all_violations.extend(static_violations)
-            
-            # AI analysis (async)
-            ai_violations = await self.ai_analyzer.analyze_code(
-                file_path, content, metadata, is_copilot
-            )
-            all_violations.extend(ai_violations)
-            
-            # License checking
-            license_violations = self.license_checker.check_file(file_path, content)
-            all_violations.extend(license_violations)
+            try:
+                file_path = file_data.get("path", "")
+                content = file_data.get("content", "")
+                metadata = file_data.get("metadata", {})
+                
+                if not file_path:
+                    logger.warning("Skipping file with no path")
+                    continue
+                
+                # Detect Copilot code
+                is_copilot = False
+                if request.detect_copilot:
+                    try:
+                        is_copilot = self.copilot_detector.detect(content, metadata)
+                        if is_copilot:
+                            copilot_detected = True
+                            logger.info(f"Copilot code detected in {file_path}")
+                    except Exception as e:
+                        logger.warning(f"Copilot detection failed for {file_path}: {e}")
+                
+                # Static analysis
+                try:
+                    static_violations = self.static_analyzer.analyze_file(
+                        file_path, content, is_copilot
+                    )
+                    all_violations.extend(static_violations)
+                except Exception as e:
+                    logger.error(f"Static analysis failed for {file_path}: {e}")
+                
+                # AI analysis (async)
+                try:
+                    ai_violations = await self.ai_analyzer.analyze_code(
+                        file_path, content, metadata, is_copilot
+                    )
+                    all_violations.extend(ai_violations)
+                except Exception as e:
+                    logger.warning(f"AI analysis failed for {file_path}: {e}")
+                    # Continue without AI analysis if it fails
+                
+                # License checking
+                try:
+                    license_violations = self.license_checker.check_file(file_path, content)
+                    all_violations.extend(license_violations)
+                except Exception as e:
+                    logger.warning(f"License checking failed for {file_path}: {e}")
+            except Exception as e:
+                logger.error(f"Error processing file {file_data.get('path', 'unknown')}: {e}")
+                continue
         
         # Apply policy filtering
         filtered_violations = self.policy_engine.filter_violations(

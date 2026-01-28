@@ -66,6 +66,11 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
   const pr = payload.pull_request;
   const repo = payload.repository;
 
+  if (!pr || !repo) {
+    console.error('[PR] Invalid payload: missing pr or repo');
+    return;
+  }
+
   if (action === 'opened' || action === 'synchronize' || action === 'reopened') {
     console.log(`[PR] Scanning PR #${pr.number} in ${repo.full_name}`);
     
@@ -76,19 +81,47 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         app
       );
 
+      if (!result) {
+        console.error(`[PR] Scan returned no result for PR #${pr.number}`);
+        return;
+      }
+
       console.log(`[PR] Scan completed: ${result.violations?.length || 0} violations`);
       console.log(`[PR] Can merge: ${result.can_merge}`);
 
       // Post results as PR comments
       console.log(`[PR] Posting comments to PR #${pr.number}`);
-      await postPRComments(
-        repo.owner.login,
-        repo.name,
-        pr.number,
-        result,
-        app
-      );
-      console.log(`[PR] Successfully posted comments to PR #${pr.number}`);
+      try {
+        await postPRComments(
+          repo.owner.login,
+          repo.name,
+          pr.number,
+          result,
+          app
+        );
+        console.log(`[PR] Successfully posted comments to PR #${pr.number}`);
+      } catch (commentError: any) {
+        console.error(`[PR] Failed to post comments:`, commentError?.message || commentError);
+        // Try to at least set commit status
+        try {
+          const octokit = await app.getInstallationOctokit(
+            (await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
+              owner: repo.owner.login,
+              repo: repo.name
+            })).data.id
+          );
+          await octokit.rest.repos.createCommitStatus({
+            owner: repo.owner.login,
+            repo: repo.name,
+            sha: pr.head.sha,
+            state: result.can_merge ? 'success' : 'failure',
+            description: `Scan completed: ${result.violations?.length || 0} violations`,
+            context: 'guardrails/security-scan'
+          });
+        } catch (statusError: any) {
+          console.error(`[PR] Failed to set commit status:`, statusError?.message || statusError);
+        }
+      }
     } catch (error: any) {
       console.error(`[PR] Error processing PR #${pr.number}:`, error?.message || error);
       console.error(`[PR] Error stack:`, error?.stack);

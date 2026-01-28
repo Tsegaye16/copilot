@@ -151,4 +151,28 @@ class LicenseChecker:
                 violations.append(violation)
                 break
         
+        # Check for common code patterns that might be copied from Stack Overflow or similar
+        suspicious_patterns = [
+            (r'# Source:.*stackoverflow', "Code may be copied from Stack Overflow without attribution"),
+            (r'# Copied from', "Code appears to be copied without proper attribution"),
+            (r'# From.*github', "Code may be copied from GitHub without proper license check"),
+        ]
+        
+        for pattern, explanation in suspicious_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                violation = Violation(
+                    rule_id="IP002",
+                    rule_name="Potential Unattributed Code",
+                    category=ViolationCategory.IP_RISK,
+                    severity=Severity.MEDIUM,
+                    file_path=file_path,
+                    line_number=1,
+                    message="Code may be copied from external source",
+                    explanation=explanation,
+                    fix_suggestion="Ensure proper attribution and license compatibility",
+                    standard_mappings=[]
+                )
+                violations.append(violation)
+                break
+        
         return violations
