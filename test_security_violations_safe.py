@@ -1,10 +1,3 @@
-"""
-Test file with security violations using FAKE credentials
-This file uses obviously fake secrets to avoid GitHub Push Protection
-while still testing the guardrails system.
-All secrets are prefixed with FAKE_ to make it clear they're test data.
-"""
-
 # ============================================================================
 # CRITICAL: Hardcoded Secrets and Credentials (FAKE - for testing only)
 # ============================================================================
