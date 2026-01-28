@@ -16,25 +16,36 @@ function formatPrivateKey(key: string | undefined): string {
     throw new Error('GITHUB_APP_PRIVATE_KEY is not set');
   }
   
-  // If key already contains literal \n (escaped), convert to actual newlines
-  if (key.includes('\\n') && !key.includes('\n')) {
-    // Key is stored as single line with \n escape sequences
-    return key.replace(/\\n/g, '\n');
+  // Trim whitespace
+  key = key.trim();
+  
+  // If key contains literal \n (escaped newlines), convert to actual newlines
+  // This is the format Render.com needs: single line with \n
+  if (key.includes('\\n')) {
+    // Replace \\n with actual newlines
+    const formatted = key.replace(/\\n/g, '\n');
+    console.log('[Config] Private key formatted from escaped \\n format');
+    return formatted;
   }
   
-  // If key contains actual newlines (multi-line format from environment)
-  // This happens when Render.com preserves newlines in the env var
+  // If key contains actual newlines (multi-line format)
+  // This might happen if Render.com preserves newlines
   if (key.includes('\n') && key.split('\n').length > 1) {
-    // Key is already in correct format with actual newlines
-    // Just return it as-is (Octokit can handle this)
-    return key;
+    // Check if it's a complete key (has BEGIN and END)
+    if (key.includes('BEGIN') && key.includes('END')) {
+      console.log('[Config] Private key detected in multi-line format');
+      return key;
+    }
   }
   
-  // If it's a single line without newlines, it might be missing them
-  // Check if it looks like a private key
-  if (key.includes('BEGIN') && key.includes('END') && !key.includes('\n')) {
-    console.warn('Private key appears to be on a single line without newlines. This may cause issues.');
-    console.warn('Please format the key with \\n for newlines in Render.com environment variables.');
+  // If key is on a single line but looks incomplete (only has BEGIN line)
+  // This is the error we're seeing - Render.com only read the first line
+  if (key.startsWith('-----BEGIN') && !key.includes('\\n') && !key.includes('\n') && key.length < 100) {
+    throw new Error(
+      'Private key appears incomplete. Render.com may have only read the first line.\n' +
+      'Please format the key as a SINGLE LINE with \\n for newlines in Render.com environment variables.\n' +
+      'Example: -----BEGIN RSA PRIVATE KEY-----\\nMIIE...\\n-----END RSA PRIVATE KEY-----'
+    );
   }
   
   return key;

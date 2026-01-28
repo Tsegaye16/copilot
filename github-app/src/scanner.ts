@@ -5,14 +5,33 @@ import axios from 'axios';
 import { App } from '@octokit/app';
 import { getPRFiles, getCommitFiles } from './github-client';
 
-// Get backend URL and ensure it has protocol
+// Get backend URL and ensure it has protocol and correct domain
 function getBackendUrl(): string {
-  const url = process.env.BACKEND_API_URL || 'http://localhost:8000';
+  let url = process.env.BACKEND_API_URL || 'http://localhost:8000';
+  
+  // Trim whitespace
+  url = url.trim();
   
   // If URL doesn't start with http:// or https://, add https://
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     console.warn(`[Scanner] Backend URL missing protocol, adding https://: ${url}`);
-    return `https://${url}`;
+    url = `https://${url}`;
+  }
+  
+  // If URL is just "guardrails-backend" or similar, add .onrender.com
+  if (url === 'https://guardrails-backend' || url === 'http://guardrails-backend') {
+    console.warn(`[Scanner] Backend URL incomplete, adding .onrender.com: ${url}`);
+    url = 'https://guardrails-backend.onrender.com';
+  }
+  
+  // Ensure it ends with .onrender.com if it's a render service
+  if (url.includes('guardrails-backend') && !url.includes('.onrender.com')) {
+    url = url.replace(/guardrails-backend.*$/, 'guardrails-backend.onrender.com');
+    // Ensure https://
+    if (!url.startsWith('https://')) {
+      url = url.replace(/^http:\/\//, 'https://');
+    }
+    console.warn(`[Scanner] Backend URL corrected to: ${url}`);
   }
   
   return url;
