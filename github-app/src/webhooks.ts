@@ -16,48 +16,62 @@ export async function handleWebhook(
   const deliveryId = req.headers['x-github-delivery'] as string;
   const signature = req.headers['x-hub-signature-256'] as string;
 
-  console.log(`Received webhook: ${event} (${deliveryId})`);
+  console.log(`[Webhook] Received: ${event} (${deliveryId})`);
+  console.log(`[Webhook] Event type: ${event}`);
+  console.log(`[Webhook] Has signature: ${!!signature}`);
 
   // Verify webhook signature if secret is set
   const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
   if (webhookSecret && signature) {
-    // Get raw body for signature verification
-    const rawBody = JSON.stringify(req.body);
-    const expectedSignature = 'sha256=' + createHmac('sha256', webhookSecret)
-      .update(rawBody)
-      .digest('hex');
-    
-    if (signature !== expectedSignature) {
-      console.error('Webhook signature verification failed');
-      console.error(`Expected: ${expectedSignature.substring(0, 20)}...`);
-      console.error(`Received: ${signature.substring(0, 20)}...`);
-      res.status(401).send('Unauthorized');
+    try {
+      // Get raw body for signature verification
+      const rawBody = JSON.stringify(req.body);
+      const expectedSignature = 'sha256=' + createHmac('sha256', webhookSecret)
+        .update(rawBody)
+        .digest('hex');
+      
+      if (signature !== expectedSignature) {
+        console.error('[Webhook] Signature verification failed');
+        console.error(`[Webhook] Expected: ${expectedSignature.substring(0, 20)}...`);
+        console.error(`[Webhook] Received: ${signature.substring(0, 20)}...`);
+        res.status(401).json({ error: 'Unauthorized: Invalid signature' });
+        return;
+      }
+      console.log('[Webhook] Signature verified successfully');
+    } catch (sigError: any) {
+      console.error('[Webhook] Signature verification error:', sigError?.message);
+      res.status(401).json({ error: 'Unauthorized: Signature verification failed' });
       return;
     }
+  } else if (webhookSecret && !signature) {
+    console.warn('[Webhook] Warning: Webhook secret configured but no signature received');
   }
 
   try {
     switch (event) {
       case 'pull_request':
+        console.log('[Webhook] Handling pull_request event');
         await handlePullRequest(req.body, app);
         break;
       case 'push':
+        console.log('[Webhook] Handling push event');
         await handlePush(req.body, app);
         break;
       case 'pull_request_review':
+        console.log('[Webhook] Handling pull_request_review event');
         await handlePullRequestReview(req.body, app);
         break;
       default:
-        console.log(`Unhandled event type: ${event}`);
+        console.log(`[Webhook] Unhandled event type: ${event}`);
     }
 
-    res.status(200).send('OK');
+    res.status(200).json({ status: 'ok', event });
   } catch (error: any) {
-    console.error('Webhook handling error:', error);
-    console.error('Error stack:', error?.stack);
-    console.error('Error message:', error?.message);
-    // Still return 200 to GitHub so it doesn't retry
-    res.status(200).send('OK');
+    console.error('[Webhook] Handling error:', error);
+    console.error('[Webhook] Error stack:', error?.stack);
+    console.error('[Webhook] Error message:', error?.message);
+    // Still return 200 to GitHub so it doesn't retry, but log the error
+    res.status(200).json({ status: 'error', error: error?.message });
   }
 }
 
@@ -66,13 +80,19 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
   const pr = payload.pull_request;
   const repo = payload.repository;
 
+  console.log(`[PR] Event action: ${action}`);
+  console.log(`[PR] PR number: ${pr?.number}`);
+  console.log(`[PR] Repository: ${repo?.full_name}`);
+
   if (!pr || !repo) {
     console.error('[PR] Invalid payload: missing pr or repo');
+    console.error('[PR] PR:', !!pr);
+    console.error('[PR] Repo:', !!repo);
     return;
   }
 
   if (action === 'opened' || action === 'synchronize' || action === 'reopened') {
-    console.log(`[PR] Scanning PR #${pr.number} in ${repo.full_name}`);
+    console.log(`[PR] Processing PR #${pr.number} in ${repo.full_name} (action: ${action})`);
     
     try {
       const result = await scanPullRequest(
@@ -86,8 +106,10 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         return;
       }
 
-      console.log(`[PR] Scan completed: ${result.violations?.length || 0} violations`);
+      console.log(`[PR] Scan completed successfully`);
+      console.log(`[PR] Violations: ${result.violations?.length || 0}`);
       console.log(`[PR] Can merge: ${result.can_merge}`);
+      console.log(`[PR] Enforcement: ${result.enforcement_action}`);
 
       // Post results as PR comments
       console.log(`[PR] Posting comments to PR #${pr.number}`);
@@ -102,6 +124,9 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         console.log(`[PR] Successfully posted comments to PR #${pr.number}`);
       } catch (commentError: any) {
         console.error(`[PR] Failed to post comments:`, commentError?.message || commentError);
+        console.error(`[PR] Comment error stack:`, commentError?.stack);
+        console.error(`[PR] Comment error response:`, commentError?.response?.data);
+        
         // Try to at least set commit status
         try {
           const octokit: any = await getInstallationOctokit(
@@ -117,6 +142,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
             description: `Scan completed: ${result.violations?.length || 0} violations`,
             context: 'guardrails/security-scan'
           });
+          console.log(`[PR] Set commit status as fallback`);
         } catch (statusError: any) {
           console.error(`[PR] Failed to set commit status:`, statusError?.message || statusError);
         }
@@ -124,8 +150,12 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
     } catch (error: any) {
       console.error(`[PR] Error processing PR #${pr.number}:`, error?.message || error);
       console.error(`[PR] Error stack:`, error?.stack);
+      console.error(`[PR] Error code:`, error?.code);
+      console.error(`[PR] Error response:`, error?.response?.data);
       // Don't throw - log and continue
     }
+  } else {
+    console.log(`[PR] Skipping action ${action} (only processing opened/synchronize/reopened)`);
   }
 }
 
