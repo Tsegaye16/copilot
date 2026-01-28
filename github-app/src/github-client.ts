@@ -278,14 +278,25 @@ export async function postPRComments(
     if (scanResult.error) {
       state = 'error';
       description = scanResult.error_message || 'Backend unavailable';
-    } else if (scanResult.can_merge) {
-      state = 'success';
-      description = scanResult.violations?.length
-        ? `${scanResult.violations.length} violation(s) found`
-        : 'All checks passed';
     } else {
-      state = 'failure';
-      description = `${scanResult.violations?.length || 0} violation(s) found`;
+      // Check for violations - if there are critical/high violations, always show failure
+      const violations = scanResult.violations || [];
+      const criticalCount = scanResult.summary?.by_severity?.critical || 0;
+      const highCount = scanResult.summary?.by_severity?.high || 0;
+      const hasCriticalOrHigh = criticalCount > 0 || highCount > 0;
+      
+      if (violations.length === 0) {
+        state = 'success';
+        description = 'All checks passed';
+      } else if (hasCriticalOrHigh || !scanResult.can_merge) {
+        // Blocking violations or merge blocked
+        state = 'failure';
+        description = `${violations.length} violation(s) found (${criticalCount} critical, ${highCount} high)`;
+      } else {
+        // Warning mode with only medium/low violations
+        state = 'success';
+        description = `${violations.length} violation(s) found (non-blocking)`;
+      }
     }
     
     try {

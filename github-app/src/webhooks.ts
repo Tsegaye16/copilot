@@ -160,12 +160,29 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
             app
           );
           // Determine status based on result
-          let state: 'success' | 'failure' | 'error' = result.error 
-            ? 'error' 
-            : (result.can_merge ? 'success' : 'failure');
-          const description = result.error 
-            ? (result.error_message || 'Backend unavailable')
-            : `Scan completed: ${result.violations?.length || 0} violations`;
+          let state: 'success' | 'failure' | 'error';
+          let description: string;
+          
+          if (result.error) {
+            state = 'error';
+            description = result.error_message || 'Backend unavailable';
+          } else {
+            const violations = result.violations || [];
+            const criticalCount = result.summary?.by_severity?.critical || 0;
+            const highCount = result.summary?.by_severity?.high || 0;
+            const hasCriticalOrHigh = criticalCount > 0 || highCount > 0;
+            
+            if (violations.length === 0) {
+              state = 'success';
+              description = 'All checks passed';
+            } else if (hasCriticalOrHigh || !result.can_merge) {
+              state = 'failure';
+              description = `${violations.length} violation(s) found (${criticalCount} critical, ${highCount} high)`;
+            } else {
+              state = 'success';
+              description = `${violations.length} violation(s) found (non-blocking)`;
+            }
+          }
           
           await octokit.rest.repos.createCommitStatus({
             owner: repo.owner.login,
@@ -266,12 +283,22 @@ async function postCommitStatus(
     if (result.error) {
       state = 'error';
       description = result.error_message || 'Backend unavailable';
-    } else if (result.can_merge) {
-      state = 'success';
-      description = 'All checks passed';
     } else {
-      state = 'failure';
-      description = `${result.violations?.length || 0} violations found`;
+      const violations = result.violations || [];
+      const criticalCount = result.summary?.by_severity?.critical || 0;
+      const highCount = result.summary?.by_severity?.high || 0;
+      const hasCriticalOrHigh = criticalCount > 0 || highCount > 0;
+      
+      if (violations.length === 0) {
+        state = 'success';
+        description = 'All checks passed';
+      } else if (hasCriticalOrHigh || !result.can_merge) {
+        state = 'failure';
+        description = `${violations.length} violation(s) found (${criticalCount} critical, ${highCount} high)`;
+      } else {
+        state = 'success';
+        description = `${violations.length} violation(s) found (non-blocking)`;
+      }
     }
 
     await octokit.rest.repos.createCommitStatus({

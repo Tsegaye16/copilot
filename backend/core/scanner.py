@@ -87,34 +87,63 @@ class CodeScanner:
                 
                 # AI analysis (async) - both for finding new violations and enhancing existing ones
                 try:
-                    ai_violations = await self.ai_analyzer.analyze_code(
-                        file_path, content, metadata, is_copilot
-                    )
-                    all_violations.extend(ai_violations)
+                    if self.ai_analyzer.enabled:
+                        logger.info(f"AI analyzer is enabled, running analysis for {file_path}")
+                        ai_violations = await self.ai_analyzer.analyze_code(
+                            file_path, content, metadata, is_copilot
+                        )
+                        all_violations.extend(ai_violations)
+                        logger.info(f"AI analyzer found {len(ai_violations)} additional violations")
+                    else:
+                        logger.warning(f"AI analyzer is disabled (GEMINI_API_KEY not set), skipping AI analysis")
                     
                     # Enhance static violations with AI-generated fix suggestions if AI is enabled
                     if self.ai_analyzer.enabled and static_violations:
                         logger.info(f"Enhancing {len(static_violations)} static violations with AI suggestions for {file_path}")
+                        enhanced_count = 0
                         for violation in static_violations:
-                            # Only enhance if violation doesn't have a good fix suggestion or it's generic
-                            if not violation.fix_suggestion or len(violation.fix_suggestion) < 50:
+                            # Check if suggestion is generic (common generic phrases)
+                            generic_phrases = [
+                                "Use environment variables",
+                                "Use safer alternatives",
+                                "implement strict input validation",
+                                "Use parameterized queries"
+                            ]
+                            is_generic = not violation.fix_suggestion or any(
+                                phrase.lower() in violation.fix_suggestion.lower() 
+                                for phrase in generic_phrases
+                            )
+                            
+                            # Always enhance with AI if enabled (AI provides better contextual suggestions)
+                            if is_generic or not violation.fix_suggestion:
                                 try:
-                                    # Get code context around the violation line
+                                    # Get code context around the violation line (more context for better suggestions)
                                     lines = content.split('\n')
-                                    start_line = max(0, violation.line_number - 5)
-                                    end_line = min(len(lines), violation.line_number + 5)
+                                    start_line = max(0, violation.line_number - 10)
+                                    end_line = min(len(lines), violation.line_number + 10)
                                     code_context = '\n'.join(lines[start_line:end_line])
                                     
-                                    # Get AI-suggested fix
+                                    # Get AI-suggested fix with full context
+                                    logger.debug(f"Requesting AI fix suggestion for {violation.rule_id} at line {violation.line_number}")
                                     ai_fix = await self.ai_analyzer.suggest_fix(violation, code_context)
-                                    if ai_fix:
+                                    if ai_fix and len(ai_fix.strip()) > 20:  # Ensure AI suggestion is meaningful
+                                        old_suggestion = violation.fix_suggestion[:50] + "..." if violation.fix_suggestion and len(violation.fix_suggestion) > 50 else violation.fix_suggestion
                                         violation.fix_suggestion = ai_fix
-                                        logger.debug(f"Enhanced violation {violation.rule_id} with AI suggestion")
+                                        enhanced_count += 1
+                                        logger.info(f"✓ Enhanced violation {violation.rule_id} with AI suggestion (was: '{old_suggestion}')")
+                                    else:
+                                        logger.debug(f"AI suggestion for {violation.rule_id} was too short or empty ({len(ai_fix) if ai_fix else 0} chars), keeping static suggestion")
                                 except Exception as e:
                                     logger.warning(f"Failed to enhance violation {violation.rule_id} with AI: {e}")
+                                    logger.debug(f"Error details: {type(e).__name__}: {str(e)}")
                                     # Continue with existing fix suggestion
+                            else:
+                                logger.debug(f"Skipping AI enhancement for {violation.rule_id} - already has specific suggestion")
+                        
+                        logger.info(f"Enhanced {enhanced_count}/{len(static_violations)} violations with AI suggestions")
                 except Exception as e:
                     logger.warning(f"AI analysis failed for {file_path}: {e}")
+                    logger.debug(f"AI error details: {type(e).__name__}: {str(e)}")
                     # Continue without AI analysis if it fails
                 
                 # License checking

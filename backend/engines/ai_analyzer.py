@@ -250,22 +250,68 @@ Respond with only "true" or "false"."""
             return None
         
         try:
-            prompt = f"""Provide a specific code fix for this security issue:
+            # Build a more detailed prompt for better code suggestions
+            prompt = f"""You are a security expert providing code fixes for security vulnerabilities.
 
-Issue: {violation.message}
-Explanation: {violation.explanation}
-File: {violation.file_path}
-Line: {violation.line_number}
+**Security Issue:**
+Rule ID: {violation.rule_id}
+Rule Name: {violation.rule_name}
+Severity: {violation.severity.value.upper()}
+Category: {violation.category.value}
 
-Code context:
+**Issue Description:**
+{violation.message}
+
+**Explanation:**
+{violation.explanation}
+
+**Vulnerable Code (Line {violation.line_number}):**
 ```python
 {code_context}
 ```
 
-Provide only the fixed code snippet, not explanations."""
+**Your Task:**
+Provide a SPECIFIC, ACTIONABLE code fix that:
+1. Shows the exact code change needed
+2. Includes complete code example (not just a description)
+3. Uses best practices for the specific language/framework
+4. Is production-ready and secure
+
+**Requirements:**
+- Provide ONLY the fixed code snippet
+- Include necessary imports if needed
+- Show the complete function/method if applicable
+- Use proper error handling
+- Follow security best practices
+
+**Example Format:**
+```python
+# Fixed code here
+import os
+API_KEY = os.getenv('API_KEY')
+```
+
+Now provide the fix for this specific issue:"""
             
             response = await self._call_gemini(prompt)
-            return response.strip()
+            
+            # Clean up the response - extract code block if present
+            import re
+            code_match = re.search(r'```(?:python)?\s*\n(.*?)\n```', response, re.DOTALL)
+            if code_match:
+                return code_match.group(1).strip()
+            
+            # If no code block, return the response but clean it up
+            cleaned = response.strip()
+            # Remove common prefixes like "Here's the fix:" etc.
+            prefixes = ["here's", "here is", "the fix", "solution:", "fixed code:"]
+            for prefix in prefixes:
+                if cleaned.lower().startswith(prefix):
+                    cleaned = cleaned[len(prefix):].strip()
+                    if cleaned.startswith(':'):
+                        cleaned = cleaned[1:].strip()
+            
+            return cleaned if len(cleaned) > 20 else None
         except Exception as e:
             logger.error(f"Fix suggestion failed: {e}")
             return None
