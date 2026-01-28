@@ -23,45 +23,79 @@ export async function getPRFiles(
   prNumber: number,
   app: App
 ): Promise<any[]> {
-  const [owner, repo] = repository.split('/');
-  const octokit = await getInstallationOctokit(owner, repo, app);
+  try {
+    const [owner, repo] = repository.split('/');
+    console.log(`[GitHub] Fetching PR files for ${owner}/${repo} PR #${prNumber}`);
+    
+    const octokit = await getInstallationOctokit(owner, repo, app);
 
-  const { data: files } = await octokit.rest.pulls.listFiles({
-    owner,
-    repo,
-    pull_number: prNumber
-  });
+    const { data: files } = await octokit.rest.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber
+    });
 
-  // Fetch full content for each file
-  const filesWithContent = await Promise.all(
-    files.map(async (file) => {
-      if (file.status === 'removed') {
-        return file;
-      }
+    console.log(`[GitHub] Found ${files.length} files in PR`);
 
-      try {
-        const { data: content } = await octokit.rest.repos.getContent({
-          owner,
-          repo,
-          path: file.filename,
-          ref: file.sha
-        });
+    if (files.length === 0) {
+      console.warn(`[GitHub] No files found in PR #${prNumber}`);
+      return [];
+    }
 
-        if ('content' in content && content.encoding === 'base64') {
-          return {
-            ...file,
-            contents: Buffer.from(content.content, 'base64').toString('utf-8')
-          };
+    // Fetch full content for each file
+    const filesWithContent = await Promise.all(
+      files.map(async (file) => {
+        if (file.status === 'removed') {
+          console.log(`[GitHub] Skipping removed file: ${file.filename}`);
+          return file;
         }
-      } catch (error) {
-        console.error(`Failed to fetch content for ${file.filename}:`, error);
-      }
 
-      return file;
-    })
-  );
+        try {
+          // Get PR details to find the head SHA
+          const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber
+          });
 
-  return filesWithContent;
+          // Try to get file content from PR head
+          const { data: content } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: file.filename,
+            ref: pr.head.sha
+          });
+
+          if ('content' in content && content.encoding === 'base64') {
+            const fileContent = Buffer.from(content.content, 'base64').toString('utf-8');
+            console.log(`[GitHub] Fetched content for ${file.filename} (${fileContent.length} chars)`);
+            return {
+              ...file,
+              contents: fileContent
+            };
+          }
+        } catch (error: any) {
+          console.error(`[GitHub] Failed to fetch content for ${file.filename}:`, error?.message || error);
+          // Return file with patch if available
+          if (file.patch) {
+            console.log(`[GitHub] Using patch for ${file.filename}`);
+            return file;
+          }
+        }
+
+        return file;
+      })
+    );
+
+    const filesWithActualContent = filesWithContent.filter(f => f.contents || f.patch);
+    console.log(`[GitHub] Files with content: ${filesWithActualContent.length}/${files.length}`);
+    
+    return filesWithActualContent;
+  } catch (error: any) {
+    console.error(`[GitHub] Error fetching PR files:`, error?.message || error);
+    console.error(`[GitHub] Error stack:`, error?.stack);
+    throw error;
+  }
 }
 
 export async function getCommitFiles(
