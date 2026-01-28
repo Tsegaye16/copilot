@@ -76,6 +76,7 @@ class CodeScanner:
                         logger.warning(f"Copilot detection failed for {file_path}: {e}")
                 
                 # Static analysis
+                static_violations = []
                 try:
                     static_violations = self.static_analyzer.analyze_file(
                         file_path, content, is_copilot
@@ -84,12 +85,34 @@ class CodeScanner:
                 except Exception as e:
                     logger.error(f"Static analysis failed for {file_path}: {e}")
                 
-                # AI analysis (async)
+                # AI analysis (async) - both for finding new violations and enhancing existing ones
                 try:
                     ai_violations = await self.ai_analyzer.analyze_code(
                         file_path, content, metadata, is_copilot
                     )
                     all_violations.extend(ai_violations)
+                    
+                    # Enhance static violations with AI-generated fix suggestions if AI is enabled
+                    if self.ai_analyzer.enabled and static_violations:
+                        logger.info(f"Enhancing {len(static_violations)} static violations with AI suggestions for {file_path}")
+                        for violation in static_violations:
+                            # Only enhance if violation doesn't have a good fix suggestion or it's generic
+                            if not violation.fix_suggestion or len(violation.fix_suggestion) < 50:
+                                try:
+                                    # Get code context around the violation line
+                                    lines = content.split('\n')
+                                    start_line = max(0, violation.line_number - 5)
+                                    end_line = min(len(lines), violation.line_number + 5)
+                                    code_context = '\n'.join(lines[start_line:end_line])
+                                    
+                                    # Get AI-suggested fix
+                                    ai_fix = await self.ai_analyzer.suggest_fix(violation, code_context)
+                                    if ai_fix:
+                                        violation.fix_suggestion = ai_fix
+                                        logger.debug(f"Enhanced violation {violation.rule_id} with AI suggestion")
+                                except Exception as e:
+                                    logger.warning(f"Failed to enhance violation {violation.rule_id} with AI: {e}")
+                                    # Continue with existing fix suggestion
                 except Exception as e:
                     logger.warning(f"AI analysis failed for {file_path}: {e}")
                     # Continue without AI analysis if it fails

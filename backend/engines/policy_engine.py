@@ -122,7 +122,7 @@ class PolicyEngine:
             # Check if override is allowed and requested
             if override_requested and policy.allow_blocking_override:
                 # Allow override but still show warnings
-                if critical_violations or copilot_critical:
+                if critical_violations or copilot_critical or high_violations:
                     return EnforcementMode.WARNING, True
                 else:
                     return EnforcementMode.ADVISORY, True
@@ -131,11 +131,9 @@ class PolicyEngine:
             if copilot_critical:
                 return EnforcementMode.BLOCKING, False
             
-            # Block on critical violations or multiple high violations
-            if critical_violations or (high_violations and len(high_violations) > 3):
+            # Block on ANY critical violations OR ANY high violations (standard convention)
+            if critical_violations or high_violations:
                 return EnforcementMode.BLOCKING, False
-            elif high_violations:
-                return EnforcementMode.WARNING, True
             else:
                 return EnforcementMode.ADVISORY, True
         elif policy.enforcement_mode == EnforcementMode.WARNING:

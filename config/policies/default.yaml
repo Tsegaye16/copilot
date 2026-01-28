@@ -1,5 +1,9 @@
 # Default policy configuration
-enforcement_mode: warning
+# enforcement_mode options: blocking, warning, advisory
+# blocking: Blocks merge on critical/high violations
+# warning: Allows merge but shows warnings
+# advisory: Only reports violations, always allows merge
+enforcement_mode: blocking
 severity_threshold: medium
 allow_blocking_override: true
 
