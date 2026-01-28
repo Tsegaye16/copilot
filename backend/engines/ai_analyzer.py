@@ -271,25 +271,29 @@ Category: {violation.category.value}
 ```
 
 **Your Task:**
-Provide a SPECIFIC, ACTIONABLE code fix that:
+Provide a CONCISE, ACTIONABLE code fix (maximum 30 lines) that:
 1. Shows the exact code change needed
-2. Includes complete code example (not just a description)
-3. Uses best practices for the specific language/framework
-4. Is production-ready and secure
+2. Includes a complete, working code example
+3. Uses security best practices
+4. Is production-ready
 
 **Requirements:**
-- Provide ONLY the fixed code snippet
-- Include necessary imports if needed
-- Show the complete function/method if applicable
-- Use proper error handling
-- Follow security best practices
+- Keep it SHORT and FOCUSED (max 30 lines)
+- Show ONLY the fixed function/method, not entire file
+- Include necessary imports
+- Add brief inline comments for clarity
+- Skip lengthy explanations - focus on the code fix
 
-**Example Format:**
+**Example Format (concise):**
 ```python
-# Fixed code here
 import os
+
 API_KEY = os.getenv('API_KEY')
+if not API_KEY:
+    raise ValueError("API_KEY environment variable required")
 ```
+
+**Important:** Be concise! Developers need quick, actionable fixes, not lengthy tutorials.
 
 Now provide the fix for this specific issue:"""
             
@@ -299,7 +303,14 @@ Now provide the fix for this specific issue:"""
             import re
             code_match = re.search(r'```(?:python)?\s*\n(.*?)\n```', response, re.DOTALL)
             if code_match:
-                return code_match.group(1).strip()
+                code_snippet = code_match.group(1).strip()
+                # Limit to 30 lines max for conciseness
+                lines = code_snippet.split('\n')
+                if len(lines) > 30:
+                    # Take first 30 lines and add a note
+                    truncated = '\n'.join(lines[:30])
+                    code_snippet = truncated + '\n# ... (truncated for brevity)'
+                return code_snippet
             
             # If no code block, return the response but clean it up
             cleaned = response.strip()
@@ -310,6 +321,10 @@ Now provide the fix for this specific issue:"""
                     cleaned = cleaned[len(prefix):].strip()
                     if cleaned.startswith(':'):
                         cleaned = cleaned[1:].strip()
+            
+            # Limit text responses to 500 characters
+            if len(cleaned) > 500:
+                cleaned = cleaned[:500] + "..."
             
             return cleaned if len(cleaned) > 20 else None
         except Exception as e:

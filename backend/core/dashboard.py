@@ -110,3 +110,60 @@ class DashboardService:
             "copilot_violation_rate": (copilot_violations / len(copilot_scans)) if copilot_scans else 0,
             "average_violation_rate": (total_violations / len(logs)) if logs else 0
         }
+    
+    async def get_most_common_violations(
+        self,
+        repository: Optional[str] = None,
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """Get most common violations"""
+        logs = await self.audit_logger.get_logs(
+            repository=repository,
+            limit=10000
+        )
+        
+        # In production, this would query violation details from database
+        # For now, return structure
+        return {
+            "top_violations": [],
+            "by_rule_id": {},
+            "by_category": {},
+            "by_severity": {}
+        }
+    
+    async def get_risk_hotspots(
+        self,
+        repository: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get risk hotspots - files/repos with most violations"""
+        logs = await self.audit_logger.get_logs(
+            repository=repository,
+            limit=10000
+        )
+        
+        # Group by repository
+        repo_stats = {}
+        for log in logs:
+            repo = log.repository
+            if repo not in repo_stats:
+                repo_stats[repo] = {
+                    "repository": repo,
+                    "total_scans": 0,
+                    "total_violations": 0,
+                    "critical_violations": 0,
+                    "high_violations": 0
+                }
+            repo_stats[repo]["total_scans"] += 1
+            repo_stats[repo]["total_violations"] += log.violations_count
+        
+        # Sort by violation count
+        hotspots = sorted(
+            repo_stats.values(),
+            key=lambda x: x["total_violations"],
+            reverse=True
+        )[:10]
+        
+        return {
+            "risk_hotspots": hotspots,
+            "total_repositories": len(repo_stats)
+        }

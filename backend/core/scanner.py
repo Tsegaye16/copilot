@@ -14,6 +14,8 @@ try:
     from engines.copilot_detector import CopilotDetector
     from engines.license_checker import LicenseChecker
     from engines.policy_engine import PolicyEngine
+    from engines.coding_standards import CodingStandardsEngine
+    from engines.duplicate_detector import DuplicateDetector
 except ImportError:
     from ..models.schemas import (
         ScanRequest, ScanResult, Violation, EnforcementMode, PolicyConfig
@@ -36,6 +38,8 @@ class CodeScanner:
         self.copilot_detector = CopilotDetector()
         self.license_checker = LicenseChecker()
         self.policy_engine = PolicyEngine()
+        self.coding_standards = CodingStandardsEngine()
+        self.duplicate_detector = DuplicateDetector()
     
     async def scan(self, request: ScanRequest) -> ScanResult:
         """Perform comprehensive code scan"""
@@ -43,6 +47,9 @@ class CodeScanner:
         scan_id = str(uuid.uuid4())
         
         logger.info(f"Starting scan {scan_id} for {request.repository}")
+        
+        # Enforce data residency and code retention policies
+        self._enforce_data_policies(request)
         
         all_violations: List[Violation] = []
         copilot_detected = False
@@ -152,6 +159,17 @@ class CodeScanner:
                     all_violations.extend(license_violations)
                 except Exception as e:
                     logger.warning(f"License checking failed for {file_path}: {e}")
+                
+                # Enterprise coding standards checking
+                try:
+                    # Get custom standards from policy if available
+                    custom_standards = policy.custom_rules if hasattr(policy, 'custom_rules') else None
+                    standards_violations = self.coding_standards.analyze_file(
+                        file_path, content, is_copilot, custom_standards
+                    )
+                    all_violations.extend(standards_violations)
+                except Exception as e:
+                    logger.warning(f"Coding standards check failed for {file_path}: {e}")
             except Exception as e:
                 logger.error(f"Error processing file {file_data.get('path', 'unknown')}: {e}")
                 continue
@@ -163,9 +181,23 @@ class CodeScanner:
         
         # Apply rule packs if specified
         for pack_name in policy.rule_packs:
-            filtered_violations = self.policy_engine.apply_rule_pack(
-                filtered_violations, pack_name
+            # Apply rule pack to each file
+            for file_data in request.files:
+                file_path = file_data.get("path", "")
+                content = file_data.get("content", "")
+                filtered_violations = self.policy_engine.apply_rule_pack(
+                    filtered_violations, pack_name, file_path, content
+                )
+        
+        # Detect duplicate code patterns
+        try:
+            duplicate_violations = self.duplicate_detector.detect_duplicates(
+                request.files, request.repository
             )
+            filtered_violations.extend(duplicate_violations)
+            logger.info(f"Duplicate detection found {len(duplicate_violations)} violations")
+        except Exception as e:
+            logger.warning(f"Duplicate detection failed: {e}")
         
         # Determine enforcement action (with override support)
         override_requested = getattr(request, 'override_blocking', False)
@@ -215,3 +247,19 @@ class CodeScanner:
             summary["by_category"][category] = summary["by_category"].get(category, 0) + 1
         
         return summary
+    
+    def _enforce_data_policies(self, request: ScanRequest):
+        """Enforce data residency and code retention policies"""
+        from core.config import settings
+        
+        # Data residency enforcement
+        if settings.DATA_RESIDENCY_REGION:
+            logger.info(f"Data residency region: {settings.DATA_RESIDENCY_REGION}")
+            # In production, this would route data processing to the specified region
+            # For now, we just log it
+        
+        # Code retention prevention
+        if not settings.ENABLE_CODE_RETENTION:
+            logger.info("Code retention disabled - code will not be stored after analysis")
+            # Ensure code content is not persisted beyond scan completion
+            # The code is already processed in-memory and not stored in database

@@ -127,7 +127,8 @@ async function callBackendAPI(endpoint: string, data: any, retries = 3): Promise
 export async function scanPullRequest(
   repository: string,
   prNumber: number,
-  app: App
+  app: App,
+  overrideBlocking: boolean = false
 ): Promise<any> {
   const startTime = Date.now();
   try {
@@ -181,7 +182,8 @@ export async function scanPullRequest(
           status: file.status
         }
       })),
-      detect_copilot: true
+      detect_copilot: true,
+      override_blocking: overrideBlocking
     };
 
     console.log(`[Scanner] Sending scan request for ${scanRequest.files.length} files`);

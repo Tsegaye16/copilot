@@ -61,6 +61,10 @@ export async function handleWebhook(
         console.log('[Webhook] Handling pull_request_review event');
         await handlePullRequestReview(req.body, app);
         break;
+      case 'issue_comment':
+        console.log('[Webhook] Handling issue_comment event');
+        await handleIssueComment(req.body, app);
+        break;
       default:
         console.log(`[Webhook] Unhandled event type: ${event}`);
     }
@@ -263,6 +267,70 @@ async function handlePush(payload: any, app: App): Promise<void> {
 async function handlePullRequestReview(payload: any, app: App): Promise<void> {
   // Handle review events if needed
   console.log('Pull request review event received');
+}
+
+async function handleIssueComment(payload: any, app: App): Promise<void> {
+  // Handle PR comments to detect override requests
+  const comment = payload.comment;
+  const issue = payload.issue;
+  const repo = payload.repository;
+  
+  // Check if this is a PR (issues and PRs use the same API)
+  if (!issue.pull_request) {
+    return; // Not a PR, ignore
+  }
+  
+  const commentBody = comment.body?.toLowerCase() || '';
+  
+  // Check for override request patterns
+  const overridePatterns = [
+    /override.*blocking/i,
+    /bypass.*guardrails/i,
+    /allow.*merge/i,
+    /\[override\]/i,
+    /guardrails.*override/i
+  ];
+  
+  const isOverrideRequest = overridePatterns.some(pattern => pattern.test(commentBody));
+  
+  if (isOverrideRequest) {
+    console.log(`[Override] Override request detected in PR #${issue.number} by ${comment.user.login}`);
+    
+    try {
+      // Get PR details
+      const octokit = await getInstallationOctokit(repo.owner.login, repo.name, app);
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner: repo.owner.login,
+        repo: repo.name,
+        pull_number: issue.number
+      });
+      
+      // Re-scan with override flag
+      console.log(`[Override] Re-scanning PR #${issue.number} with override enabled`);
+      const { scanPullRequest } = await import('./scanner');
+      const result = await scanPullRequest(
+        repo.full_name,
+        issue.number,
+        app,
+        true // override_blocking = true
+      );
+      
+      // Post updated comment
+      if (result) {
+        const { postPRComments } = await import('./github-client');
+        await postPRComments(
+          repo.owner.login,
+          repo.name,
+          issue.number,
+          result,
+          app
+        );
+        console.log(`[Override] Updated PR #${issue.number} with override applied`);
+      }
+    } catch (error: any) {
+      console.error(`[Override] Failed to process override request:`, error?.message || error);
+    }
+  }
 }
 
 async function postCommitStatus(

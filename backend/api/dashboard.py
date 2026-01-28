@@ -64,3 +64,30 @@ async def get_copilot_insights(
     except Exception as e:
         logger.error(f"Failed to get Copilot insights: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/violations/common")
+async def get_most_common_violations(
+    repository: Optional[str] = Query(None),
+    limit: int = Query(10, le=100)
+):
+    """Get most common violations"""
+    try:
+        violations = await dashboard_service.get_most_common_violations(repository, limit)
+        return violations
+    except Exception as e:
+        logger.error(f"Failed to get common violations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/risk/hotspots")
+async def get_risk_hotspots(
+    repository: Optional[str] = Query(None)
+):
+    """Get risk hotspots - repositories/files with most violations"""
+    try:
+        hotspots = await dashboard_service.get_risk_hotspots(repository)
+        return hotspots
+    except Exception as e:
+        logger.error(f"Failed to get risk hotspots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

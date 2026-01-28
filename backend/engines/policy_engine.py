@@ -43,6 +43,29 @@ class PolicyEngine:
     
     def get_policy(self, repository: str, override: Optional[Dict[str, Any]] = None) -> PolicyConfig:
         """Get policy configuration for a repository"""
+        # Extract organization from repository (format: org/repo)
+        org_name = None
+        if '/' in repository:
+            org_name = repository.split('/')[0]
+        
+        # Check for organization-level policy first
+        if org_name:
+            org_policy_path = Path(f"{self.config_path}/organizations/{org_name}.yaml")
+            if org_policy_path.exists():
+                try:
+                    with open(org_policy_path, 'r') as f:
+                        org_policy_data = yaml.safe_load(f)
+                        policy = PolicyConfig(**org_policy_data)
+                        logger.info(f"Loaded organization policy for {org_name}")
+                        # Apply override if provided
+                        if override:
+                            for key, value in override.items():
+                                if hasattr(policy, key):
+                                    setattr(policy, key, value)
+                        return policy
+                except Exception as e:
+                    logger.warning(f"Failed to load organization policy: {e}")
+        
         # Check for repository-specific policy
         repo_policy_path = Path(f"{self.config_path}/{repository}.yaml")
         
@@ -144,7 +167,13 @@ class PolicyEngine:
         else:  # ADVISORY
             return EnforcementMode.ADVISORY, True
     
-    def apply_rule_pack(self, violations: List[Violation], pack_name: str) -> List[Violation]:
+    def apply_rule_pack(
+        self,
+        violations: List[Violation],
+        pack_name: str,
+        file_path: str = "",
+        content: str = ""
+    ) -> List[Violation]:
         """Apply additional rules from a rule pack"""
         if pack_name not in self.rule_packs:
             logger.warning(f"Rule pack not found: {pack_name}")
@@ -155,9 +184,67 @@ class PolicyEngine:
         
         # Apply custom rules from pack
         custom_rules = pack.get("rules", [])
-        for rule in custom_rules:
-            # Rule application logic would go here
-            # This is a placeholder for rule pack rule execution
-            pass
+        if not custom_rules:
+            return violations
         
+        lines = content.split('\n') if content else []
+        
+        for rule in custom_rules:
+            try:
+                rule_id = rule.get("id", "")
+                rule_name = rule.get("name", "")
+                pattern_str = rule.get("pattern", "")
+                category_str = rule.get("category", "compliance")
+                severity_str = rule.get("severity", "medium")
+                explanation = rule.get("explanation", "")
+                standard_mappings = rule.get("standard_mappings", [])
+                
+                if not pattern_str:
+                    continue
+                
+                # Compile pattern
+                import re
+                pattern = re.compile(pattern_str, re.MULTILINE | re.IGNORECASE)
+                
+                # Search for matches
+                for line_num, line in enumerate(lines, 1):
+                    if pattern.search(line):
+                        # Check if violation already exists (avoid duplicates)
+                        existing = any(
+                            v.rule_id == rule_id and v.line_number == line_num
+                            for v in violations + additional_violations
+                        )
+                        if existing:
+                            continue
+                        
+                        from models.schemas import ViolationCategory, Severity
+                        try:
+                            category = ViolationCategory(category_str)
+                        except:
+                            category = ViolationCategory.COMPLIANCE
+                        
+                        try:
+                            severity = Severity(severity_str)
+                        except:
+                            severity = Severity.MEDIUM
+                        
+                        additional_violations.append(Violation(
+                            rule_id=rule_id,
+                            rule_name=rule_name,
+                            category=category,
+                            severity=severity,
+                            file_path=file_path,
+                            line_number=line_num,
+                            message=f"{rule_name} detected",
+                            explanation=explanation or f"Violation of {rule_name} rule from {pack_name} rule pack",
+                            fix_suggestion=f"Review and fix {rule_name} violation according to {pack_name} compliance requirements",
+                            standard_mappings=standard_mappings,
+                            code_snippet=line.strip(),
+                            is_copilot_generated=False
+                        ))
+            except Exception as e:
+                logger.warning(f"Failed to apply rule {rule.get('id', 'unknown')} from pack {pack_name}: {e}")
+                continue
+        
+        logger.info(f"Applied rule pack {pack_name}: found {len(additional_violations)} additional violations")
         return violations + additional_violations
