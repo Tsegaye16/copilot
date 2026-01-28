@@ -8,14 +8,38 @@ export async function getInstallationOctokit(
   repo: string,
   app: App
 ): Promise<any> {
-  // Get installation ID for the repository using the app's octokit
-  const { data: installation } = await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
-    owner,
-    repo
-  });
-  
-  // Get authenticated octokit for this installation
-  return await app.getInstallationOctokit(installation.id);
+  try {
+    console.log(`[GitHub] Getting installation for ${owner}/${repo}`);
+    
+    // Get installation ID for the repository using the app's octokit
+    const { data: installation } = await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
+      owner,
+      repo
+    });
+    
+    console.log(`[GitHub] Installation ID: ${installation.id}`);
+    
+    // Get authenticated octokit for this installation
+    const octokit: any = await app.getInstallationOctokit(installation.id);
+    
+    if (!octokit) {
+      throw new Error('Failed to get installation octokit - returned undefined');
+    }
+    
+    // Check if it's the new format (has rest) or old format (direct methods)
+    if (!octokit.rest && !octokit.pulls) {
+      console.error(`[GitHub] Octokit instance structure:`, Object.keys(octokit));
+      throw new Error('Octokit instance missing rest property and direct methods');
+    }
+    
+    console.log(`[GitHub] Successfully obtained installation octokit`);
+    console.log(`[GitHub] Octokit has rest: ${!!octokit.rest}`);
+    return octokit;
+  } catch (error: any) {
+    console.error(`[GitHub] Error getting installation octokit:`, error?.message || error);
+    console.error(`[GitHub] Error stack:`, error?.stack);
+    throw error;
+  }
 }
 
 export async function getPRFiles(
@@ -27,9 +51,21 @@ export async function getPRFiles(
     const [owner, repo] = repository.split('/');
     console.log(`[GitHub] Fetching PR files for ${owner}/${repo} PR #${prNumber}`);
     
-    const octokit = await getInstallationOctokit(owner, repo, app);
+    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    
+    if (!octokit) {
+      throw new Error('Octokit instance is undefined');
+    }
+    
+    // Handle both new format (octokit.rest.pulls) and potential old format
+    const pullsApi = octokit.rest?.pulls || octokit.pulls;
+    if (!pullsApi) {
+      console.error(`[GitHub] Octokit structure:`, Object.keys(octokit));
+      throw new Error('Octokit instance missing pulls API');
+    }
 
-    const { data: files } = await octokit.rest.pulls.listFiles({
+    console.log(`[GitHub] Calling pulls.listFiles`);
+    const { data: files } = await pullsApi.listFiles({
       owner,
       repo,
       pull_number: prNumber
@@ -52,14 +88,17 @@ export async function getPRFiles(
 
         try {
           // Get PR details to find the head SHA
-          const { data: pr } = await octokit.rest.pulls.get({
+          const pullsApi = octokit.rest?.pulls || octokit.pulls;
+          const reposApi = octokit.rest?.repos || octokit.repos;
+          
+          const { data: pr } = await pullsApi.get({
             owner,
             repo,
             pull_number: prNumber
           });
 
           // Try to get file content from PR head
-          const { data: content } = await octokit.rest.repos.getContent({
+          const { data: content } = await reposApi.getContent({
             owner,
             repo,
             path: file.filename,
@@ -107,9 +146,21 @@ export async function getCommitFiles(
     const [owner, repo] = repository.split('/');
     console.log(`[GitHub] Fetching commit ${commitSha} from ${owner}/${repo}`);
     
-    const octokit = await getInstallationOctokit(owner, repo, app);
+    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    
+    if (!octokit) {
+      throw new Error('Octokit instance is undefined');
+    }
+    
+    // Handle both new format (octokit.rest.repos) and potential old format
+    const reposApi = octokit.rest?.repos || octokit.repos;
+    if (!reposApi) {
+      console.error(`[GitHub] Octokit structure:`, Object.keys(octokit));
+      throw new Error('Octokit instance missing repos API');
+    }
 
-    const { data: commit } = await octokit.rest.repos.getCommit({
+    console.log(`[GitHub] Calling repos.getCommit`);
+    const { data: commit } = await reposApi.getCommit({
       owner,
       repo,
       ref: commitSha
@@ -132,11 +183,22 @@ export async function postPRComments(
 ): Promise<void> {
   try {
     console.log(`[GitHub] Getting installation octokit for ${owner}/${repo}`);
-    const octokit = await getInstallationOctokit(owner, repo, app);
+    const octokit: any = await getInstallationOctokit(owner, repo, app);
+    
+    // Handle both new format (octokit.rest.*) and potential old format
+    const pullsApi = octokit.rest?.pulls || octokit.pulls;
+    const issuesApi = octokit.rest?.issues || octokit.issues;
+    const reposApi = octokit.rest?.repos || octokit.repos;
+    
+    if (!pullsApi || !issuesApi || !reposApi) {
+      console.error(`[GitHub] Octokit structure:`, Object.keys(octokit));
+      throw new Error('Octokit instance missing required APIs');
+    }
+    
     console.log(`[GitHub] Successfully authenticated`);
 
     // Get the PR head SHA for comments
-    const { data: pr } = await octokit.rest.pulls.get({
+    const { data: pr } = await pullsApi.get({
       owner,
       repo,
       pull_number: prNumber
@@ -157,7 +219,7 @@ export async function postPRComments(
     // Post summary comment
     const summaryComment = buildSummaryComment(scanResult);
     try {
-      await octokit.rest.issues.createComment({
+      await issuesApi.createComment({
         owner,
         repo,
         issue_number: prNumber,
@@ -175,7 +237,7 @@ export async function postPRComments(
       for (const violation of violations) {
         try {
           // Get file content to find the correct line in the diff
-          const { data: fileContent } = await octokit.rest.repos.getContent({
+          const { data: fileContent } = await reposApi.getContent({
             owner,
             repo,
             path: filePath,
@@ -186,7 +248,7 @@ export async function postPRComments(
             const lines = Buffer.from(fileContent.content, 'base64').toString('utf-8').split('\n');
             const lineNumber = Math.min(violation.line_number || 1, lines.length);
 
-            await octokit.rest.pulls.createReviewComment({
+            await pullsApi.createReviewComment({
               owner,
               repo,
               pull_number: prNumber,
@@ -212,7 +274,7 @@ export async function postPRComments(
       : 'All checks passed';
     
     try {
-      await octokit.rest.repos.createCommitStatus({
+      await reposApi.createCommitStatus({
         owner,
         repo,
         sha: headSha,

@@ -19,20 +19,30 @@ function formatPrivateKey(key: string | undefined): string {
   // Trim whitespace
   key = key.trim();
   
+  // Debug: Log first 100 chars to see what we're getting
+  console.log(`[Config] Private key length: ${key.length}`);
+  console.log(`[Config] Private key preview: ${key.substring(0, 100)}...`);
+  console.log(`[Config] Contains \\n: ${key.includes('\\n')}`);
+  console.log(`[Config] Contains actual newline: ${key.includes('\n')}`);
+  console.log(`[Config] Has BEGIN: ${key.includes('BEGIN')}`);
+  console.log(`[Config] Has END: ${key.includes('END')}`);
+  
   // If key contains literal \n (escaped newlines), convert to actual newlines
   // This is the format Render.com needs: single line with \n
   if (key.includes('\\n')) {
     // Replace \\n with actual newlines
     const formatted = key.replace(/\\n/g, '\n');
     console.log('[Config] Private key formatted from escaped \\n format');
-    return formatted;
+    if (formatted.includes('BEGIN') && formatted.includes('END') && formatted.length > 500) {
+      return formatted;
+    }
   }
   
   // If key contains actual newlines (multi-line format)
   // This might happen if Render.com preserves newlines
   if (key.includes('\n') && key.split('\n').length > 1) {
     // Check if it's a complete key (has BEGIN and END)
-    if (key.includes('BEGIN') && key.includes('END')) {
+    if (key.includes('BEGIN') && key.includes('END') && key.length > 500) {
       console.log('[Config] Private key detected in multi-line format');
       return key;
     }
@@ -40,11 +50,32 @@ function formatPrivateKey(key: string | undefined): string {
   
   // If key is on a single line but looks incomplete (only has BEGIN line)
   // This is the error we're seeing - Render.com only read the first line
-  if (key.startsWith('-----BEGIN') && !key.includes('\\n') && !key.includes('\n') && key.length < 100) {
+  if (key.startsWith('-----BEGIN') && !key.includes('END') && key.length < 200) {
+    console.error('[Config] ERROR: Private key appears incomplete!');
+    console.error('[Config] Key length:', key.length);
+    console.error('[Config] Key content:', key);
+    console.error('[Config]');
+    console.error('[Config] ============================================');
+    console.error('[Config] SOLUTION:');
+    console.error('[Config] 1. Go to Render.com → Your Service → Environment');
+    console.error('[Config] 2. Find GITHUB_APP_PRIVATE_KEY');
+    console.error('[Config] 3. Delete the current value');
+    console.error('[Config] 4. Copy the ENTIRE key from formatted_private_key.txt');
+    console.error('[Config] 5. Paste it as ONE SINGLE LINE (no line breaks)');
+    console.error('[Config] 6. It should start with -----BEGIN and end with -----END');
+    console.error('[Config] 7. Save and redeploy');
+    console.error('[Config] ============================================');
     throw new Error(
       'Private key appears incomplete. Render.com may have only read the first line.\n' +
-      'Please format the key as a SINGLE LINE with \\n for newlines in Render.com environment variables.\n' +
-      'Example: -----BEGIN RSA PRIVATE KEY-----\\nMIIE...\\n-----END RSA PRIVATE KEY-----'
+      'The key should be a SINGLE LINE with \\n for newlines.\n' +
+      'Please check formatted_private_key.txt and paste the ENTIRE line into Render.com environment variables.'
+    );
+  }
+  
+  // If key doesn't have BEGIN or END, it's definitely wrong
+  if (!key.includes('BEGIN') || !key.includes('END')) {
+    throw new Error(
+      'Private key format is invalid. Must include -----BEGIN RSA PRIVATE KEY----- and -----END RSA PRIVATE KEY-----'
     );
   }
   
