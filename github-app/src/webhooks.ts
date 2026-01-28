@@ -91,7 +91,10 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
     return;
   }
 
-  if (action === 'opened' || action === 'synchronize' || action === 'reopened') {
+  // Process PR events - handle all actions that might need scanning
+  const actionsToProcess = ['opened', 'synchronize', 'reopened', 'ready_for_review'];
+  
+  if (actionsToProcess.includes(action)) {
     console.log(`[PR] Processing PR #${pr.number} in ${repo.full_name} (action: ${action})`);
     
     try {
@@ -103,6 +106,18 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
 
       if (!result) {
         console.error(`[PR] Scan returned no result for PR #${pr.number}`);
+        // Try to post a comment about the failure
+        try {
+          const octokit: any = await getInstallationOctokit(repo.owner.login, repo.name, app);
+          await octokit.rest.issues.createComment({
+            owner: repo.owner.login,
+            repo: repo.name,
+            issue_number: pr.number,
+            body: '⚠️ **Guardrails Scan Failed**\n\nUnable to scan this PR. Please check the logs for details.'
+          });
+        } catch (e) {
+          console.error(`[PR] Failed to post error comment:`, e);
+        }
         return;
       }
 
@@ -111,7 +126,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
       console.log(`[PR] Can merge: ${result.can_merge}`);
       console.log(`[PR] Enforcement: ${result.enforcement_action}`);
 
-      // Post results as PR comments
+      // Always post results, even if no violations
       console.log(`[PR] Posting comments to PR #${pr.number}`);
       try {
         await postPRComments(
@@ -126,6 +141,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         console.error(`[PR] Failed to post comments:`, commentError?.message || commentError);
         console.error(`[PR] Comment error stack:`, commentError?.stack);
         console.error(`[PR] Comment error response:`, commentError?.response?.data);
+        console.error(`[PR] Comment error status:`, commentError?.response?.status);
         
         // Try to at least set commit status
         try {
@@ -145,6 +161,7 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
           console.log(`[PR] Set commit status as fallback`);
         } catch (statusError: any) {
           console.error(`[PR] Failed to set commit status:`, statusError?.message || statusError);
+          console.error(`[PR] Status error:`, statusError?.response?.data);
         }
       }
     } catch (error: any) {
@@ -152,10 +169,23 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
       console.error(`[PR] Error stack:`, error?.stack);
       console.error(`[PR] Error code:`, error?.code);
       console.error(`[PR] Error response:`, error?.response?.data);
-      // Don't throw - log and continue
+      console.error(`[PR] Error response status:`, error?.response?.status);
+      
+      // Try to post error comment
+      try {
+        const octokit: any = await getInstallationOctokit(repo.owner.login, repo.name, app);
+        await octokit.rest.issues.createComment({
+          owner: repo.owner.login,
+          repo: repo.name,
+          issue_number: pr.number,
+          body: `❌ **Guardrails Scan Error**\n\nError: ${error?.message || 'Unknown error'}\n\nPlease check the service logs.`
+        });
+      } catch (e) {
+        console.error(`[PR] Failed to post error comment:`, e);
+      }
     }
   } else {
-    console.log(`[PR] Skipping action ${action} (only processing opened/synchronize/reopened)`);
+    console.log(`[PR] Skipping action ${action} (only processing: ${actionsToProcess.join(', ')})`);
   }
 }
 
