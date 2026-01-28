@@ -5,7 +5,7 @@ import { Request, Response } from 'express';
 import { App } from '@octokit/app';
 import { createHmac } from 'crypto';
 import { scanPullRequest, scanCommit } from './scanner';
-import { postPRComments } from './github-client';
+import { postPRComments, getInstallationOctokit } from './github-client';
 
 export async function handleWebhook(
   req: Request,
@@ -104,11 +104,10 @@ async function handlePullRequest(payload: any, app: App): Promise<void> {
         console.error(`[PR] Failed to post comments:`, commentError?.message || commentError);
         // Try to at least set commit status
         try {
-          const octokit = await app.getInstallationOctokit(
-            (await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
-              owner: repo.owner.login,
-              repo: repo.name
-            })).data.id
+          const octokit: any = await getInstallationOctokit(
+            repo.owner.login,
+            repo.name,
+            app
           );
           await octokit.rest.repos.createCommitStatus({
             owner: repo.owner.login,
@@ -179,26 +178,25 @@ async function postCommitStatus(
   result: any,
   app: App
 ): Promise<void> {
-  // Get installation ID for the repository using the app's octokit
-  const { data: installation } = await app.octokit.request('GET /repos/{owner}/{repo}/installation', {
-    owner,
-    repo
-  });
-  
-  // Get authenticated octokit for this installation
-  const octokit: any = await app.getInstallationOctokit(installation.id);
+  try {
+    // Get authenticated octokit for this installation
+    const octokit: any = await getInstallationOctokit(owner, repo, app);
 
-  const state = result.can_merge ? 'success' : 'failure';
-  const description = result.can_merge
-    ? 'All checks passed'
-    : `${result.violations.length} violations found`;
+    const state = result.can_merge ? 'success' : 'failure';
+    const description = result.can_merge
+      ? 'All checks passed'
+      : `${result.violations?.length || 0} violations found`;
 
-  await octokit.rest.repos.createCommitStatus({
-    owner,
-    repo,
-    sha,
-    state,
-    description,
-    context: 'guardrails/security-scan'
-  });
+    await octokit.rest.repos.createCommitStatus({
+      owner,
+      repo,
+      sha,
+      state,
+      description,
+      context: 'guardrails/security-scan'
+    });
+  } catch (error: any) {
+    console.error(`[CommitStatus] Failed to set status for ${sha}:`, error?.message || error);
+    throw error;
+  }
 }
