@@ -17,6 +17,25 @@ logger = logging.getLogger(__name__)
 dashboard_service = DashboardService()
 
 
+def normalize_repository(repo: Optional[str]) -> Optional[str]:
+    """Normalize repository format to owner/repo"""
+    if not repo:
+        return None
+    
+    # Remove protocol and domain if present
+    normalized = repo.replace("https://github.com/", "").replace("http://github.com/", "")
+    normalized = normalized.replace("https://", "").replace("http://", "").rstrip("/")
+    
+    # Extract owner/repo if it's a full URL
+    if "/" in normalized:
+        parts = normalized.split("/")
+        if len(parts) >= 2:
+            # Take last two parts (owner/repo)
+            return f"{parts[-2]}/{parts[-1]}"
+    
+    return normalized if normalized else None
+
+
 @router.get("/stats")
 async def get_dashboard_stats(
     repository: Optional[str] = Query(None),
@@ -25,8 +44,9 @@ async def get_dashboard_stats(
 ):
     """Get dashboard statistics"""
     try:
+        normalized_repo = normalize_repository(repository)
         stats = await dashboard_service.get_stats(
-            repository=repository,
+            repository=normalized_repo,
             start_date=start_date,
             end_date=end_date
         )
@@ -43,8 +63,9 @@ async def get_violation_trends(
 ):
     """Get violation trends over time"""
     try:
+        normalized_repo = normalize_repository(repository)
         trends = await dashboard_service.get_violation_trends(
-            repository=repository,
+            repository=normalized_repo,
             days=days
         )
         return trends
@@ -59,7 +80,8 @@ async def get_copilot_insights(
 ):
     """Get Copilot-related insights"""
     try:
-        insights = await dashboard_service.get_copilot_insights(repository)
+        normalized_repo = normalize_repository(repository)
+        insights = await dashboard_service.get_copilot_insights(normalized_repo)
         return insights
     except Exception as e:
         logger.error(f"Failed to get Copilot insights: {e}")
@@ -73,7 +95,8 @@ async def get_most_common_violations(
 ):
     """Get most common violations"""
     try:
-        violations = await dashboard_service.get_most_common_violations(repository, limit)
+        normalized_repo = normalize_repository(repository)
+        violations = await dashboard_service.get_most_common_violations(normalized_repo, limit)
         return violations
     except Exception as e:
         logger.error(f"Failed to get common violations: {e}")
@@ -86,7 +109,8 @@ async def get_risk_hotspots(
 ):
     """Get risk hotspots - repositories/files with most violations"""
     try:
-        hotspots = await dashboard_service.get_risk_hotspots(repository)
+        normalized_repo = normalize_repository(repository)
+        hotspots = await dashboard_service.get_risk_hotspots(normalized_repo)
         return hotspots
     except Exception as e:
         logger.error(f"Failed to get risk hotspots: {e}")

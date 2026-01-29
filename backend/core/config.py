@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "./logs/guardrails.log"
+    AUDIT_LOG_FILE: str = "./logs/audit_logs.json"
     
     @field_validator('ALLOWED_ORIGINS', mode='before')
     @classmethod
