@@ -26,18 +26,28 @@ class AIAnalyzer:
         
         try:
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            # Use gemini-2.5-pro if available, fallback to gemini-pro
+            # Use gemini-2.5-flash (works with free tier), fallback to other models
             try:
-                self.model = genai.GenerativeModel('gemini-2.0-flash')
-                logger.info("Using Gemini 2.0 flash")
-            except:
-                self.model = genai.GenerativeModel('gemini-flash')
-                logger.info("Using Gemini Pro")
+                self.model = genai.GenerativeModel('gemini-2.5-flash')
+                logger.info("Using Gemini 2.5 Flash")
+            except Exception as e1:
+                logger.warning(f"Failed to load gemini-2.5-flash: {e1}, trying gemini-flash")
+                try:
+                    self.model = genai.GenerativeModel('gemini-flash')
+                    logger.info("Using Gemini Flash")
+                except Exception as e2:
+                    logger.warning(f"Failed to load gemini-flash: {e2}, trying gemini-1.5-flash")
+                    self.model = genai.GenerativeModel('gemini-1.5-flash')
+                    logger.info("Using Gemini 1.5 Flash")
             self.enabled = True
+            self.quota_exceeded = False  # Track quota status
+            self.quota_exceeded_time = None  # Track when quota was exceeded
             logger.info("Gemini AI analyzer initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Gemini: {e}")
             self.enabled = False
+            self.quota_exceeded = False
+            self.quota_exceeded_time = None
     
     async def analyze_code(
         self,
@@ -47,7 +57,17 @@ class AIAnalyzer:
         is_copilot: bool = False
     ) -> List[Violation]:
         """Analyze code using AI for contextual understanding"""
-        if not self.enabled:
+        # Check if quota was exceeded and enough time has passed (1 hour)
+        if self.quota_exceeded and self.quota_exceeded_time:
+            import time
+            if time.time() - self.quota_exceeded_time > 3600:  # 1 hour
+                logger.info("Resetting quota_exceeded flag after 1 hour")
+                self.quota_exceeded = False
+                self.quota_exceeded_time = None
+        
+        if not self.enabled or self.quota_exceeded:
+            if self.quota_exceeded:
+                logger.debug("AI analysis skipped due to quota exceeded")
             return []
         
         try:
@@ -56,7 +76,14 @@ class AIAnalyzer:
             violations = self._parse_ai_response(response, file_path, is_copilot)
             return violations
         except Exception as e:
-            logger.error(f"AI analysis failed for {file_path}: {e}")
+            error_str = str(e)
+            if "quota" in error_str.lower() or "exceeded" in error_str.lower():
+                logger.warning(f"AI analysis skipped for {file_path} due to quota limits")
+                import time
+                self.quota_exceeded = True
+                self.quota_exceeded_time = time.time()
+            else:
+                logger.error(f"AI analysis failed for {file_path}: {e}")
             return []
     
     def _build_analysis_prompt(
@@ -159,19 +186,67 @@ Return ONLY valid JSON array. If no issues found, return [].
 """
         return prompt
     
-    async def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini API"""
-        try:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.model.generate_content(prompt)
-            )
-            return response.text
-        except Exception as e:
-            logger.error(f"Gemini API call failed: {e}")
-            raise
+    async def _call_gemini(self, prompt: str, max_retries: int = 3) -> str:
+        """Call Gemini API with retry logic for quota errors"""
+        import asyncio
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.model.generate_content(prompt)
+                )
+                # Reset quota_exceeded flag on success
+                self.quota_exceeded = False
+                return response.text
+            except Exception as e:
+                error_str = str(e)
+                
+                # Check for quota exceeded (429 error)
+                if "429" in error_str or "quota" in error_str.lower() or "exceeded" in error_str.lower():
+                    self.quota_exceeded = True
+                    
+                    # Extract retry delay from error if available
+                    retry_delay = 60  # Default 60 seconds
+                    if "retry in" in error_str.lower() or "retry_delay" in error_str.lower():
+                        import re
+                        delay_match = re.search(r'retry.*?(\d+(?:\.\d+)?)', error_str, re.IGNORECASE)
+                        if delay_match:
+                            retry_delay = float(delay_match.group(1))
+                            retry_delay = min(retry_delay + 5, 300)  # Cap at 5 minutes
+                    
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"Gemini API quota exceeded (attempt {attempt + 1}/{max_retries}). "
+                            f"Retrying in {retry_delay:.1f} seconds..."
+                        )
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(
+                            f"Gemini API quota exceeded after {max_retries} attempts. "
+                            f"AI features will be temporarily disabled. Error: {error_str[:200]}"
+                        )
+                        # Track when quota was exceeded (will auto-reset after 1 hour)
+                        import time
+                        self.quota_exceeded_time = time.time()
+                        # Don't disable completely, just mark as exceeded
+                        # This allows the system to continue with static analysis
+                        raise Exception(f"Quota exceeded: {error_str[:200]}")
+                else:
+                    # Other errors - log and raise
+                    logger.error(f"Gemini API call failed: {e}")
+                    if attempt < max_retries - 1:
+                        # Exponential backoff for other errors
+                        wait_time = 2 ** attempt
+                        logger.warning(f"Retrying in {wait_time} seconds... (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise
+        
+        raise Exception("Max retries exceeded")
     
     def _parse_ai_response(
         self,
@@ -246,7 +321,17 @@ Respond with only "true" or "false"."""
     
     async def suggest_fix(self, violation: Violation, code_context: str) -> Optional[str]:
         """Get AI-suggested fix for a violation"""
-        if not self.enabled:
+        # Check if quota was exceeded and enough time has passed (1 hour)
+        if self.quota_exceeded and self.quota_exceeded_time:
+            import time
+            if time.time() - self.quota_exceeded_time > 3600:  # 1 hour
+                logger.info("Resetting quota_exceeded flag after 1 hour")
+                self.quota_exceeded = False
+                self.quota_exceeded_time = None
+        
+        if not self.enabled or self.quota_exceeded:
+            if self.quota_exceeded:
+                logger.debug("AI fix suggestion skipped due to quota exceeded")
             return None
         
         try:
@@ -328,5 +413,12 @@ Now provide the fix for this specific issue:"""
             
             return cleaned if len(cleaned) > 20 else None
         except Exception as e:
-            logger.error(f"Fix suggestion failed: {e}")
+            error_str = str(e)
+            if "quota" in error_str.lower() or "exceeded" in error_str.lower():
+                logger.warning(f"AI fix suggestion skipped due to quota limits")
+                import time
+                self.quota_exceeded = True
+                self.quota_exceeded_time = time.time()
+            else:
+                logger.error(f"Fix suggestion failed: {e}")
             return None
